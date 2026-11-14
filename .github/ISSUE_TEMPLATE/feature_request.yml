@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a new feature or an improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the task or measurement, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How it could work on the device.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: How you do it today, or other instruments that do it well.
+  - type: checkboxes
+    id: model
+    attributes:
+      label: Devices
+      options:
+        - label: ZT703S
+        - label: ZT706S

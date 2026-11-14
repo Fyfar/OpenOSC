@@ -208,6 +208,13 @@ All dependencies are included in [`vendor/`](vendor):
 
 Each component keeps its own license file.
 
+## Contributing
+
+Bug reports, ZT706S test results and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+and the [Code of Conduct](CODE_OF_CONDUCT.md). Questions go to
+[Discussions](https://github.com/bve/OpenOSC/discussions); security problems are reported as described
+in [SECURITY.md](SECURITY.md).
+
 ## License
 
 OpenOSC is licensed under the [GNU General Public License v3.0](LICENSE).

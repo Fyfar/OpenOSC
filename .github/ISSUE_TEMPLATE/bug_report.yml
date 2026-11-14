@@ -1,0 +1,79 @@
+name: Bug report
+description: Something does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please search the existing issues first.
+        Questions about installation and usage go to [Discussions](https://github.com/bve/OpenOSC/discussions).
+  - type: dropdown
+    id: model
+    attributes:
+      label: Device
+      options:
+        - ZT703S
+        - ZT706S
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: Shown in Settings → About, or the release you installed.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Area
+      options:
+        - Oscilloscope
+        - Multimeter
+        - Signal generator
+        - USB / SCPI / remote control
+        - Files, screenshots, settings
+        - Recovery bootloader or installation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Performance profile
+      options:
+        - 200/100
+        - 280/140
+        - 360/90
+        - Not relevant / Recovery
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Attach a screenshot if the problem is visible on screen.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Setup
+      description: Input signal and probe settings, or for USB problems the OS, PC software and whether a hub is used.
+  - type: markdown
+    attributes:
+      value: Do not attach your factory block backup. It contains your unit's own calibration.
