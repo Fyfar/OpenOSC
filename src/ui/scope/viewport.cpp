@@ -1,0 +1,71 @@
+#include "openosc/ui/scope/viewport.hpp"
+#include <algorithm>
+#include <cmath>
+
+namespace openosc::plot {
+bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsigned w, unsigned h) {
+    if (!m.valid() || !o.valid() || w < 2 || h < 2 || w > MaximumWidth || h > MaximumHeight)
+        return false;
+    width = w;
+    height = h;
+    const uint64_t fullSpan = m.timebaseNs
+        ? uint64_t(std::llround(m.timebaseNs/100000000.0*m.samplesPerSecond.value()*65536))
+        : uint64_t(m.samples-1)<<16;
+    const uint64_t record = uint64_t(m.samples - 1) << 16;
+    spanQ16 = std::max<uint64_t>(65536, fullSpan * o.zoomOut / o.zoom);
+    if (o.zoomOut > 1) spanQ16 = std::min(spanQ16, record);
+    startQ16 = int64_t(m.samples - 1) * 65536 * o.pan / 1000;
+    if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
+    if (o.lockTrigger && m.triggered)
+        startQ16 += int64_t(m.triggerIndex) * 65536 - int64_t(spanQ16) * o.triggerPosition / 1000;
+    // Without a trigger, Auto still needs captured history on both sides of the initial
+    // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
+    else if (!m.rolling && !m.triggered && o.lockTrigger &&
+             (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay))
+        startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
+    if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, 0, int64_t(record - spanQ16));
+    return true;
+}
+void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &last) const {
+    const uint64_t length = spanQ16 + 65536;
+    const int64_t start = floorSample(startQ16 + int64_t(length * x / width));
+    const int64_t end = floorSample(startQ16 + int64_t(length * (x + 1) / width));
+    first = uint32_t(std::clamp<int64_t>(start, 0, samples));
+    last = uint32_t(std::clamp<int64_t>(end, 0, samples));
+}
+int64_t Viewport::position(unsigned x) const { return startQ16 + int64_t(spanQ16 * x / (width - 1)); }
+int Viewport::sampleX(uint32_t index) const {
+    if (!spanQ16 || width < 2)
+        return 0;
+    const int64_t value = (int64_t(index) * 65536 - startQ16) * (width - 1) / int64_t(spanQ16);
+    return int(std::clamp<int64_t>(value, -4096, 4096));
+}
+bool Axis::configure(const scope::ChannelMetadata &m, const ChannelOptions &o, unsigned height) {
+    zeroQ8 = 0;
+    codesPerDivisionQ8 = 8192;
+    if (m.calibrated) {
+        const double scale = m.millivoltsPerDivision * .256 / m.voltsPerCode;
+        if (!std::isfinite(scale) || scale < 1 || scale > 16777216 || std::abs(m.zeroCode) > 32768)
+            return false;
+        codesPerDivisionQ8 = int32_t(std::lround(scale));
+        zeroQ8 = int32_t(std::lround(m.zeroCode * 256));
+    }
+    basePermille = base(m);
+    origin = int16_t(int32_t(height - 1) * (basePermille + o.positionPermille - 500) / 1000);
+    // Q16 pixel transform is evaluated only for column extrema, never for every source sample.
+    factor = int32_t(int64_t(height - 1) * 65536 * o.gainPercent / (800 * codesPerDivisionQ8));
+    if (o.invert)
+        factor = -factor;
+    return factor != 0;
+}
+int16_t Axis::base(const scope::ChannelMetadata &m) {
+    // A calibrated record compensates its codes for the analog zero, so the zero's line has to be
+    // added here. Raw codes already carry it: adding it again would move the trace twice.
+    return m.calibrated ? int16_t(std::clamp<int>(m.analogPosition, 0, 160) * 1000 / 160) : 500;
+}
+int16_t Axis::pixel(int32_t raw) const {
+    const int64_t value = int64_t(origin) - (int64_t(raw) - zeroQ8) * factor / 65536;
+    return int16_t(std::clamp<int64_t>(value, -4096, 4096));
+}
+double Axis::code(int y) const { return factor ? zeroQ8 / 256.0 + (origin - y) * 256.0 / factor : 0; }
+} // namespace openosc::plot

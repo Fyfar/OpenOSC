@@ -1,0 +1,34 @@
+#pragma once
+#include "openosc/ui/components/menu_row.hpp"
+#include <cstring>
+
+namespace openosc::ui {
+class MenuContent {
+public:
+    void reset() { for (auto &row:rows_) row=MenuRow{}; for (auto &label:labels_) label=nullptr; }
+    void begin() {
+        nextRow_=nextLabel_=0;
+        for (auto &row:rows_) row.visible(false);
+        for (auto *label:labels_) if (label) lv_obj_set_hidden(label,true);
+    }
+    lv_obj_t *text(lv_obj_t *parent,const char *value,int x,int y) {
+        auto *&label=labels_[nextLabel_++];
+        if (!label) label=Elements::label(parent,value,x,y);
+        else if (std::strcmp(lv_label_get_text(label),value)) lv_label_set_text(label,value);
+        lv_obj_set_pos(label,x,y); lv_obj_set_hidden(label,false);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
+        return label;
+    }
+    MenuRow &nextRow() { return rows_[nextRow_++]; }
+    MenuRow &row(lv_obj_t *parent,int y,int height,const char *name,const char *value,
+                 bool selected,const Theme &theme,uint32_t accent) {
+        auto &row=nextRow();
+        row.update(parent,y,height,name,value,selected,theme,accent);
+        return row;
+    }
+private:
+    MenuRow rows_[5];
+    lv_obj_t *labels_[5]{};
+    unsigned nextRow_=0,nextLabel_=0;
+};
+}

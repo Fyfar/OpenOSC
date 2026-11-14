@@ -1,0 +1,223 @@
+# OpenOSC
+
+Open-source firmware for the **ZT703S** and **ZT706S** handheld oscilloscope multimeters
+(STM32H7B0).
+
+OpenOSC replaces the stock application with its own oscilloscope, multimeter and signal generator
+firmware. It also adds a small Recovery bootloader that updates the firmware from a USB drive.
+
+> **Status:** work in progress. ZT703S is the main development and test device.
+> **ZT706S builds but has not been run on hardware yet.**
+
+> [!WARNING]
+> **This firmware is for enthusiasts only.** If you are generally happy with the stock firmware,
+> I do not recommend installing OpenOSC.
+>
+> **I take no responsibility for bricked or damaged devices.** You install this firmware entirely
+> at your own risk.
+
+## Screenshots
+
+Captured on a ZT703S running OpenOSC.
+
+<table>
+  <tr>
+    <td><img src=".github/images/scope.png" width="320" alt="Oscilloscope: 10 MHz square wave on both channels with frequency and period readouts"></td>
+    <td><img src=".github/images/multimeter.png" width="320" alt="Multimeter: millivolts with MIN/MAX/AVG statistics and bar graph"></td>
+  </tr>
+  <tr>
+    <td align="center">Oscilloscope: 10 MHz on both channels</td>
+    <td align="center">Multimeter with statistics</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/fft.png" width="320" alt="FFT, Blackman window, 2048 points, with frequency cursors"></td>
+    <td><img src=".github/images/xy.png" width="320" alt="XY mode: two square waves in quadrature"></td>
+  </tr>
+  <tr>
+    <td align="center">FFT with cursors</td>
+    <td align="center">XY mode</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/auto-setup.png" width="320" alt="Auto setup: range and timebase selected automatically for a 1 kHz square wave"></td>
+    <td><img src=".github/images/generator.png" width="320" alt="Signal generator: square wave, frequency and duty cycle"></td>
+  </tr>
+  <tr>
+    <td align="center">Auto setup</td>
+    <td align="center">Signal generator</td>
+  </tr>
+</table>
+
+## Features
+
+**Oscilloscope**
+
+- Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
+- Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position
+- Continuous Roll mode for slow timebases (200 ms/div and slower)
+- Auto Setup for both channels
+- Configurable on-screen measurements, hardware frequency counter, time and level cursors
+- XY, MATH and reference waveforms; sin(x)/x and spline interpolation, infinite persistence
+- FFT up to 2048 points with four window functions, dBFS or linear scale
+- Zero offset calibration of both channels, stored as a file and never written to the factory calibration
+- Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
+  switched instantly without a restart
+- Save waveforms as RAW or CSV
+
+**Multimeter**
+
+- DC/AC voltage, millivolts, DC/AC current and milliamps, resistance, continuity, diode, capacitance
+- Auto and manual ranges, HOLD and REL
+- Statistics, trend chart and CSV logging
+- Bar graph scaled to ±25,000 counts
+
+**Signal generator**
+
+- Six waveforms: sine, square, triangle, half sine, positive sine and sawtooth
+- Digit-by-digit frequency entry; duty cycle for square
+- Keeps running in the background while you use the oscilloscope or the multimeter
+- Output is always OFF after a restart
+- ZT706S: its external generator module, up to 10 MHz
+
+**USB and remote control**
+
+- USBTMC and CDC (virtual COM port) with SCPI commands, working alongside the local UI
+- Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
+  existing PC software such as ngscopeclient can talk to the device
+- USB Remote mode: the PC controls the device while the screen keeps showing live data
+- USB data works only in the 200/100 performance profile. Connect directly to a PC port:
+  disconnects are known, especially through USB hubs.
+
+**Interface and files**
+
+- LVGL-based user interface (English only)
+- BMP screenshots with a built-in viewer
+- Settings and the color theme are stored as JSON files on the external SPI Flash, not in the
+  microcontroller's internal Flash. This avoids wearing out the internal Flash, which holds
+  the firmware. You can edit the files from a computer, and a corrupted file is renamed and
+  replaced with defaults.
+- Hold-to-power-off with a progress bar
+
+**Recovery bootloader**
+
+- Shows the device storage as a USB drive and installs firmware from `/openosc/UPDATE/`
+- Accepts `.OSC` packages and raw `.bin` images; verifies the board model and CRC before erasing
+- Shows the calibration data and can save a copy of the factory Flash block
+- Checks and repairs the FAT file system, and can format the storage drive
+- Opens automatically if the main firmware is missing or invalid
+
+## How it works
+
+The device's own factory bootloader occupies the first 128 KiB of internal Flash. OpenOSC never
+modifies it. OpenOSC is installed on top of it in two parts:
+
+| Part | Address | Purpose |
+| --- | --- | --- |
+| Factory bootloader | `0x08000000` | Untouched. Accepts the stock `.ZTK` update containers. |
+| OpenOSC Recovery | `0x08020000` | Second-stage bootloader (128 KiB). Exposes a USB drive and installs the main firmware. |
+| OpenOSC firmware | `0x08040400` | The main application. |
+
+## Installation
+
+Installation takes two steps. First, the Recovery bootloader is installed through the device's
+standard firmware update mechanism. Then Recovery installs the OpenOSC firmware.
+
+### Step 1: install the Recovery bootloader (standard update)
+
+Recovery is packed as a regular factory update container (`.ZTK`):
+
+- ZT703S: `OpenOSC-Recovery-ZT703S.ZTK`
+- ZT706S: `OpenOSC-Recovery-ZT706S.ZTK`
+
+The file name can be changed, but it must keep the upper-case `.ZTK` extension.
+The bootloader reads the target model from the file header, not from the name.
+
+Install it the same way as an official firmware update:
+
+1. Put the device into the factory USB update mode and connect it to a computer.
+2. Copy the `.ZTK` file for your model into the `firmware` folder on the drive that appears.
+3. Wait until the bootloader finishes. It installs the file and deletes it from the drive.
+4. The device restarts into OpenOSC Recovery; restart it manually if it does not.
+   The stock application has been replaced, so Recovery opens its menu.
+
+### Recommended: back up the factory block
+
+Before installing the firmware, save a copy of the factory block. OpenOSC never writes to it,
+but a backup is your only copy if the device is ever damaged.
+
+1. In Recovery, select **BACKUP FACTORY BOOT**, then **CONFIRM** and press **MENU**.
+2. Recovery copies the whole factory block (`0x08000000`–`0x0801FFFF`, 128 KiB) to the USB drive
+   and verifies the copy:
+   - `/openosc/BACKUP/FACTORY_BOOT_08000000.bin`: the backup itself;
+   - `/openosc/BACKUP/FACTORY_BOOT_08000000.txt`: its address, size and CRC32.
+3. Copy both files from the USB drive to your computer and keep them somewhere safe.
+
+The block contains the factory bootloader and **this unit's own calibration and settings**.
+Keep a separate backup for each device and never write one device's backup to another.
+OpenOSC has no tool to restore the backup. Writing it back requires an SWD programmer.
+
+### Step 2: install the OpenOSC firmware (through Recovery)
+
+1. Start Recovery. It opens automatically when no valid firmware is installed.
+   Later, you can open it by holding **F2** while the device starts.
+2. Connect the device to a computer. Recovery shows the device's storage as a USB drive.
+3. Copy `firmware.OSC` (or `firmware.bin`) for your model into `/openosc/UPDATE/`.
+4. Finish copying. Optionally, eject the drive on the computer.
+5. On the device, select **UPDATE FIRMWARE**, choose the file, select **CONFIRM** and press **MENU**.
+6. When the update completes, select **START APPLICATION**.
+
+Recovery controls: **MENU** = OK, **F4** = back/cancel, arrow keys = navigation.
+Every confirmation starts on **CANCEL**: press left/right to select **CONFIRM**, then **MENU**.
+If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
+Confirm it and Recovery detaches the drive itself; the cable can stay connected.
+
+Recovery checks the board model, CRC and vector table of the image before erasing anything.
+An image for another model is rejected. Later updates of the main firmware use step 2 only.
+
+## Building
+
+Requirements: [PlatformIO](https://platformio.org/). The ST platform and the ARM toolchain are
+pinned in `platformio.ini` and installed automatically.
+
+```sh
+pio run
+```
+
+This builds both devices. Output files:
+
+| Device | Recovery (step 1) | Firmware (step 2) |
+| --- | --- | --- |
+| ZT703S | `.pio/build/recovery/OpenOSC-Recovery-ZT703S.ZTK` | `.pio/build/firmware/firmware.OSC` |
+| ZT706S | `.pio/build/zt706s_recovery/OpenOSC-Recovery-ZT706S.ZTK` | `.pio/build/zt706s_firmware/firmware.OSC` |
+
+Each build folder also contains `firmware.bin`. For the firmware environments, this `.bin`
+has a board marker and Recovery accepts it as well.
+To build one device only, run, for example, `pio run -e recovery -e firmware` for ZT703S.
+
+The firmware version is taken from [`VERSION`](VERSION).
+
+## Third-party components
+
+All dependencies are included in [`vendor/`](vendor):
+
+- STM32CubeH7: CMSIS, HAL and USB Device library (ST)
+- CMSIS-DSP (Arm, Apache-2.0)
+- FatFs (ChaN)
+- LVGL 9.6.0 (MIT)
+- ArduinoJson 6.21.5 (MIT)
+- IBM Plex Sans and Noto Sans Mono fonts (SIL OFL 1.1)
+
+Each component keeps its own license file.
+
+## License
+
+OpenOSC is licensed under the [GNU General Public License v3.0](LICENSE).
+
+All product names and trademarks belong to their respective owners. This project is not
+affiliated with or endorsed by the device manufacturer.
+
+## Support the project
+
+If OpenOSC is useful to you, you can support its development:
+
+- [Ko-fi](https://ko-fi.com/val23)
+- [Liberapay](https://liberapay.com/Val23)

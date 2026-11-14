@@ -1,0 +1,86 @@
+#include "openosc/measurement/dmm/ranges.hpp"
+#include <cmath>
+#include <cstring>
+
+namespace openosc::dmm {
+namespace {
+// Nominal full scales from the ZT-703S manufacturer manual, pages 32-34.
+// They describe the reported range; they are not additional calibration gains.
+constexpr RangeInfo voltsDc[] = {{"V",4,2.5},{"V",3,25},{"V",2,250},{"V",1,1000}};
+constexpr RangeInfo voltsAc[] = {{"V",4,2.5},{"V",3,25},{"V",2,250},{"V",1,750}};
+constexpr RangeInfo millivolts[] = {{"mV",3,.025},{"mV",2,.25}};
+constexpr RangeInfo amps[] = {{"A",4,2.5},{"A",3,10}};
+constexpr RangeInfo milliamps[] = {{"mA",3,.025},{"mA",2,.25}};
+constexpr RangeInfo resistance[] = {{"Ohm",2,250},{"kOhm",4,2500},{"kOhm",3,25000},{"kOhm",2,250000},
+    {"MOhm",4,2500000},{"MOhm",3,25000000},{"MOhm",1,250000000}};
+constexpr RangeInfo capacitance[] = {{"nF",3,9.999e-9},{"nF",2,99.99e-9},{"nF",1,999.9e-9},
+    {"uF",3,9.999e-6},{"uF",2,99.99e-6},{"uF",1,999.9e-6},{"mF",3,9.999e-3},{"mF",2,99.99e-3}};
+template<size_t N> const RangeInfo *array(const RangeInfo (&values)[N], unsigned &count) { count = N; return values; }
+}
+const RangeInfo *Ranges::list(Function f, unsigned &count) {
+    switch (f) {
+    case Function::VoltageDc: return array(voltsDc, count);
+    case Function::VoltageAc: return array(voltsAc, count);
+    case Function::MillivoltsDc: case Function::MillivoltsAc: return array(millivolts, count);
+    case Function::CurrentDc: case Function::CurrentAc: return array(amps, count);
+    case Function::MilliampsDc: case Function::MilliampsAc: return array(milliamps, count);
+    case Function::Resistance: return array(resistance, count);
+    case Function::Capacitance: return array(capacitance, count);
+    default: count = 0; return nullptr;
+    }
+}
+const RangeInfo *Ranges::current(const Result &result, unsigned *index) {
+    unsigned count; const auto *ranges = list(Functions::identify(result), count);
+    unsigned decimals = result.decimals;
+    if (decimals == 255 && result.primary.valid()) {
+        const char *dot = std::strchr(result.mainText, '.');
+        if (dot) decimals = std::strlen(dot + 1);
+    }
+    for (unsigned i = 0; i < count; ++i)
+        if (ranges[i].decimals == decimals && !std::strcmp(result.unit, ranges[i].unit)) {
+            if (index) *index = i;
+            return ranges + i;
+        }
+    return nullptr;
+}
+bool Ranges::choose(Function function, double maximumSi, unsigned &index) {
+    if (!std::isfinite(maximumSi) || maximumSi <= 0) return false;
+    unsigned count; const auto *ranges = list(function, count);
+    for (unsigned i = 0; i < count; ++i) if (ranges[i].maximumSi >= maximumSi) { index = i; return true; }
+    return false;
+}
+bool RangeSelector::request(unsigned index, const Result &latest, uint32_t now) {
+    if (busy()) return index == target_;
+    function_ = Functions::identify(latest);
+    Ranges::list(function_, maximum_);
+    if (index >= maximum_ || latest.peerRelative || latest.range == RangeMode::Unknown) return false;
+    unsigned actual = 0;
+    manual_ = latest.range == RangeMode::Manual && Ranges::current(latest, &actual);
+    target_ = index; attempts_ = 0; waiting_ = false; index_ = actual;
+    deadline_ = now + DeadlineMs;
+    status_ = manual_ && actual == index ? DataStatus::Ok : DataStatus::Busy;
+    return true;
+}
+bool RangeSelector::poll(const Result &latest, uint32_t now, CommandGroup &command) {
+    if (!busy()) return false;
+    if (Functions::identify(latest) != function_ || latest.peerRelative) { status_ = DataStatus::InvalidArgument; return false; }
+    if (int32_t(now - deadline_) >= 0) { status_ = DataStatus::Timeout; return false; }
+    const bool fresh = !waiting_ || (latest.sequence != sequence_ && int32_t(now - (sentAt_ + SettleMs)) >= 0);
+    unsigned actual = 0;
+    const bool manual = latest.range == RangeMode::Manual && Ranges::current(latest, &actual);
+    if (fresh && manual && actual == target_) { status_ = DataStatus::Ok; return false; }
+    if (waiting_) {
+        const uint32_t since = now - sentAt_;
+        if (!manual_) { // The first press from Auto: MANU may come late; never a second press before it.
+            if (fresh && manual) { manual_ = true; index_ = actual; }
+            else { if (since >= ManualMs) status_ = DataStatus::Unsupported; return false; }
+        } else if (!fresh || !manual || actual == index_) { // A step not yet shown (or Manual left).
+            if (since >= StepMs) status_ = DataStatus::Timeout;
+            return false;
+        }
+        index_ = actual;
+    }
+    if (attempts_ >= maximum_) { status_ = DataStatus::Timeout; return false; } // N ranges: N presses at most.
+    waiting_ = false; command = CommandGroup::NextRange; return true;
+}
+} // namespace openosc::dmm

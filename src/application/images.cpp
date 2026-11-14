@@ -1,0 +1,100 @@
+#include "openosc/application/controller.hpp"
+#include "openosc/platform/input.hpp"
+#include <cstdio>
+
+namespace openosc {
+void ApplicationController::showImages() {
+    ui::ImageList list;
+    static_assert(ui::ImageList::Rows==screenshot::ImageCatalog::PageSize);
+    list.visible=images_.visible(); list.selected=images_.selected();
+    list.first=images_.first(); list.total=images_.count();
+    for (unsigned i=0;i<list.visible;++i) list.names[i]=images_.entry(i).name;
+    view_.images(list);
+}
+void ApplicationController::openImages(uint32_t now) {
+    if (shots_.busy()) { view_.notify("Finish screenshot first",now); return; }
+    if (!cancelAuto(now)) return;
+    state_.settingsOpen=false; panel_=Panel::Images; imageShowing_=false; imageFullSize_=false;
+    if (!images_.refresh()) view_.notify(images_.error(),now);
+    showImages();
+}
+void ApplicationController::closeImages() {
+    imageReader_.cancel(); images_.cancelClear(); imageShowing_=false;
+    panel_=Panel::None; state_.settingsOpen=true;
+    navigator_.reset(settingsMenu_.selected());
+    showSettings();
+}
+void ApplicationController::loadImage(uint32_t now) {
+    char path[screenshot::ImageCatalog::PathBytes];
+    imageReader_.cancel(); imageShowing_=false;
+    if (!images_.path(path,sizeof path)) return;
+    if (!imageReader_.start(path,screenshot::previewMemory(),imageFullSize_)) {
+        showImages(); view_.notify(imageReader_.error(),now); return;
+    }
+    imageProgress_=0;
+    view_.notify("Loading image...",now);
+}
+void ApplicationController::imageKeys(uint32_t keys,uint32_t now) {
+    if (!keys) return;
+    if (keys&Keypad::Mode) { closeImages(); closeSettings(); return; }
+    if (keys&Keypad::F4) {
+        if (imageShowing_ || imageReader_.busy()) { imageReader_.cancel(); imageShowing_=false; showImages(); }
+        else closeImages();
+        return;
+    }
+    if (images_.clearing()) return;
+    if ((keys&Keypad::F2) && (imageShowing_ || imageReader_.busy())) {
+        imageFullSize_=!imageFullSize_; loadImage(now); return;
+    }
+    const bool viewing=imageShowing_ || imageReader_.busy();
+    if (keys&Keypad::F3) {
+        imageReader_.cancel();
+        if (images_.count()) confirmOperation(ui::Confirmation("DELETE THIS IMAGE?","Delete selected BMP"),&ApplicationController::deleteImage);
+        return;
+    }
+    const bool previous=keys&(Keypad::Up|Keypad::Left),next=keys&(Keypad::Down|Keypad::Right);
+    if (previous || next) {
+        imageReader_.cancel();
+        if (!images_.move(next ? 1 : -1) && images_.error()) view_.notify(images_.error(),now);
+        if (viewing) loadImage(now);
+        else showImages();
+    }
+    if (keys&Keypad::Menu) {
+        if (viewing) { imageReader_.cancel(); imageShowing_=false; showImages(); }
+        else loadImage(now);
+    }
+}
+void ApplicationController::deleteImage(uint32_t now) {
+    confirmationHandler_=nullptr; panel_=Panel::Images; imageShowing_=false;
+    if (!images_.eraseSelected()) view_.notify(images_.error() ? images_.error() : "No image selected",now);
+    showImages();
+}
+void ApplicationController::clearImages(uint32_t now) {
+    confirmationHandler_=nullptr; panel_=Panel::Images; imageShowing_=false;
+    imageReader_.cancel();
+    if (!images_.beginClear()) view_.notify(images_.error(),now);
+    showImages(); imageProgress_=0;
+}
+void ApplicationController::serviceImages(uint32_t now) {
+    if (panel_!=Panel::Images) return;
+    if (images_.clearing()) {
+        const unsigned total=images_.count();
+        if (!images_.clearStep()) {
+            const char *error=images_.error(); images_.refresh(); showImages(); view_.notify(error,now);
+        }
+        else if (!images_.clearing()) { showImages(); view_.notify("Screenshots cleared",now); }
+        else if (images_.erased()!=imageProgress_) {
+            imageProgress_=images_.erased();
+            char progress[40]; std::snprintf(progress,sizeof progress,"Deleting images: %u/%u",imageProgress_,total);
+            view_.notify(progress,now);
+        }
+    }
+    if (!imageReader_.busy()) return;
+    imageReader_.service();
+    if (imageReader_.busy()) return;
+    if (imageReader_.ready()) {
+        imageShowing_=true;
+        view_.imagePreview(images_.name(),screenshot::previewMemory(),imageFullSize_);
+    } else { showImages(); view_.notify(imageReader_.error(),now); }
+}
+} // namespace openosc

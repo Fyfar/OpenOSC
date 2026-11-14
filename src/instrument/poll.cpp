@@ -1,0 +1,71 @@
+#include "openosc/instrument/data_access.hpp"
+#include <utility>
+
+namespace openosc {
+// The streams: no FAT, no UI and no LVGL. Also run while a refresh waits on DMA2D.
+void DataAccess::serviceStreams(uint32_t now) {
+    timeUs_ += uint64_t(uint32_t(now - previousTick_)) * 1000;
+    previousTick_ = now;
+    generator_.service();
+    if (active_ && !stopping_ && measurement_==MeasurementMode::Oscilloscope) counters_.service(now);
+    uart_.service(now);
+    capture_.service(now);
+    store_.service(now);
+    serviceRolling(now);
+    serviceScopeFrames(now);
+}
+void DataAccess::serviceBackground(uint32_t now) {
+    if (!initialized_) return;
+    serviceStreams(now);
+    serviceScopeCapture(now); // A finished capture starts the next one now, not after the frame.
+}
+void DataAccess::poll(uint32_t now) {
+    serviceStreams(now);
+    if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) {
+        if (receiveErrors_ != uart_.errors() || receiveOverflows_ != uart_.overflows()) {
+            framer_.reset();
+            receiveErrors_ = uart_.errors();
+            receiveOverflows_ = uart_.overflows();
+            status_ = DataStatus::Overflow;
+        }
+        uint8_t byte, packet[dmm::Packet::Bytes];
+        for (unsigned n = 0; n < 256 && uart_.read(byte); ++n)
+            if (framer_.push(byte, packet) && meter_.accept(packet, sizeof packet, timeUs_)) {
+                status_ = meter_.latest().primary.status;
+                if (logger_.active())
+                    logger_.append(meter_.latest(), meter_.userHeld());
+            }
+    }
+    if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) {
+        dmm::CommandGroup command;
+        if (dmmSelector_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
+            if (uart_.send(command, now)) dmmSelector_.sent(meter_.latest().sequence, now);
+            else dmmSelector_.fail();
+        }
+        if (dmmKey_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
+            if (uart_.send(command, now)) dmmKey_.sent(meter_.latest().sequence, now);
+            else dmmKey_.fail();
+        }
+        if (dmmRange_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
+            if (uart_.send(command, now)) dmmRange_.sent(meter_.latest().sequence, now);
+            else dmmRange_.fail();
+        }
+    }
+    if (recordPending_ && !stopping_) {
+        scope::FrameLease lease;
+        if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }
+        else if (acquireScope(lease)) {
+            if (!recorder_.begin(std::move(lease), recordFormat_))
+                recordStatus_ = recorder_.status();
+            recordPending_ = false;
+        }
+    }
+    const bool recording = recorder_.busy();
+    recorder_.service();
+    if (recording && !recorder_.busy()) recordStatus_ = recorder_.status();
+    logger_.service();
+    if (active_ && !stopping_ && measurement_==MeasurementMode::Multimeter) serial_.service(meter_.latest(),now);
+    serviceZero(now);
+    serviceScopeCapture(now);
+}
+} // namespace openosc

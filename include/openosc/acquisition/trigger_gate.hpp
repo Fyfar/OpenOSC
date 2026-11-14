@@ -1,0 +1,56 @@
+#pragma once
+#include "openosc/acquisition/analysis.hpp"
+#include "openosc/acquisition/trigger_delay_plan.hpp"
+#include "openosc/platform/resources.hpp"
+
+namespace openosc::scope {
+class TriggerSink {
+public:
+    virtual ~TriggerSink()=default;
+    virtual void triggerEvent(bool external)=0;
+    virtual void freezeRecord()=0;
+};
+// Owns comparator EXTI0/15 and the TIM14 prefill/Auto/post-trigger delay.
+class TriggerGate {
+public:
+    explicit TriggerGate(PeripheralResources &resources) : resources_(resources) {}
+    ~TriggerGate() { stop(); }
+    // prepare() does everything that can fail (checks, delay plan, the TIM14/EXTI lease); begin()
+    // then arms the prefill delay and cannot fail. start() is both, for callers with no DMA to order.
+    // `settleMs` lengthens the prefill: no trigger, Auto timeout or force before it has passed.
+    bool prepare(const TriggerSettings &settings,Rational rate,uint32_t samples,uint32_t settleMs=0);
+    void begin(TriggerSink &sink);
+    bool start(const TriggerSettings &settings,Rational rate,uint32_t samples,TriggerSink &sink) {
+        if (!prepare(settings,rate,samples)) return false;
+        begin(sink); return true;
+    }
+    void stop();
+    // TFOR: the trigger event without an edge. Filling: once the prefill delay ends (the pre-trigger
+    // part is then filled), with no comparator armed; Armed: now. Triggered: the gate is already past
+    // its event (an edge or the Auto timeout), its record comes as it is. Refused: not running.
+    enum class Force { Refused, Forced, Triggered };
+    Force force();
+    bool timedOut(uint32_t now) const;
+    static void exti0();
+    static void exti15();
+    static void timer();
+private:
+    enum class Phase { Idle,Filling,Armed,Post,Complete };
+    void edge(uint32_t line);
+    void elapsed();
+    void delay(uint64_t ticks);
+    bool nextSpan();
+    void event(bool external);
+    static TriggerGate *active_;
+    PeripheralResources &resources_;
+    PeripheralLease lease_;
+    TriggerSink *sink_=nullptr;
+    TriggerSettings settings_;
+    TriggerDelayPlan delay_;
+    volatile Phase phase_=Phase::Idle;
+    uint64_t postTicks_=0,preTicks_=0;
+    uint32_t clock_=0,line_=0;
+    volatile uint32_t deadline_=0;
+    volatile bool deadlineValid_=false,forcePending_=false;
+};
+} // namespace openosc::scope

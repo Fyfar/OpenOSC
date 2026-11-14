@@ -1,0 +1,139 @@
+#include "openosc/ui/waveform.hpp"
+#include "openosc/ui/components/elements.hpp"
+#include <cstring>
+
+namespace openosc {
+lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
+    held_ = false;
+    fadeAt_ = frozenAt_ = 0;
+    model_.reset();
+    object_ = lv_obj_create(parent);
+    lv_obj_remove_style_all(object_);
+    lv_obj_set_scrollable(object_, false);
+    lv_obj_set_size(object_, 320, 152);
+    lv_obj_add_event_cb(object_, draw, LV_EVENT_DRAW_MAIN, this);
+    lv_obj_add_event_cb(object_, geometry, LV_EVENT_SIZE_CHANGED, this);
+    lv_obj_add_event_cb(object_, geometry, LV_EVENT_DELETE, this);
+    note_ = lv_label_create(object_);
+    lv_obj_remove_style_all(note_);
+    lv_obj_set_style_text_font(note_, ui::Elements::font(12), 0);
+    lv_obj_set_style_bg_opa(note_, LV_OPA_70, 0);
+    lv_obj_set_style_pad_hor(note_, 2, 0);
+    // Inside the plot's top right corner, clear of the XY/REF marks there.
+    lv_obj_align(note_, LV_ALIGN_TOP_RIGHT, -(plot::PlotFrame::Right + 30), plot::PlotFrame::Top + 1);
+    lv_obj_set_hidden(note_, true);
+    return object_;
+}
+void WaveformWidget::colors(const Theme &theme) {
+    palette_.background = theme.background;
+    palette_.grid = theme.grid;
+    palette_.channels[0] = theme.channel1;
+    palette_.channels[1] = theme.channel2;
+    palette_.math = theme.math;
+    palette_.reference = theme.reference;
+    palette_.cursor = theme.cursor;
+    if (object_)
+        lv_obj_invalidate(object_);
+}
+bool WaveformWidget::configure(const plot::Options &options) {
+    if (!model_.configure(options))
+        return false;
+    if (object_)
+        lv_obj_invalidate(object_);
+    return true;
+}
+void WaveformWidget::clear() {
+    model_.clear();
+    if (object_)
+        lv_obj_invalidate(object_);
+}
+void WaveformWidget::held(bool value) {
+    if (value && !held_)
+        frozenAt_ = lv_tick_get();
+    held_ = value;
+}
+void WaveformWidget::trigger(scope::Channel channel, double codes) {
+    model_.trigger(channel, codes);
+    if (object_)
+        lv_obj_invalidate(object_);
+}
+bool WaveformWidget::cursorLines(const plot::CursorOptions &cursors) {
+    if (!model_.cursorLines(cursors)) return false;
+    if (object_) lv_obj_invalidate(object_);
+    return true;
+}
+void WaveformWidget::cursorFocus(plot::CursorLine line) {
+    if (model_.cursorFocus() == line) return;
+    model_.cursorFocus(line);
+    if (object_) lv_obj_invalidate(object_);
+}
+void WaveformWidget::note(const char *text, uint32_t color) {
+    if (!note_) return;
+    if (std::strcmp(lv_label_get_text(note_), text)) lv_label_set_text(note_, text);
+    ui::Elements::textColor(note_, color);
+    if (!lv_color_eq(lv_obj_get_style_bg_color(note_, LV_PART_MAIN), lv_color_hex(palette_.background)))
+        lv_obj_set_style_bg_color(note_, lv_color_hex(palette_.background), 0);
+    lv_obj_set_hidden(note_, !*text);
+}
+void WaveformWidget::setFrame(const scope::FrameView &frame) {
+    if (!object_)
+        return;
+    lv_obj_update_layout(object_);
+    const auto before = model_.statistics().projections;
+    const bool dirty = model_.needsFrame();
+    model_.project(frame, plot::PlotFrame::plotWidth(lv_obj_get_width(object_)), plot::PlotFrame::plotHeight(lv_obj_get_height(object_)),
+                   held_ ? frozenAt_ : lv_tick_get(), held_ ? nullptr : cache_);
+    if (dirty || model_.needsFrame() || before != model_.statistics().projections)
+        lv_obj_invalidate(object_);
+}
+void WaveformWidget::service(uint32_t now) {
+    if (!object_ || held_ || !lv_obj_is_visible(object_) || !model_.options().persistenceMs ||
+        !model_.hasFrame())
+        return;
+    if (uint32_t(now - fadeAt_) < 50)
+        return;
+    if (uint32_t(now - model_.frameTime()) > uint32_t(model_.options().persistenceMs) * 16 / 14 + 100)
+        return;
+    fadeAt_ = now;
+    lv_obj_invalidate(object_);
+}
+bool WaveformWidget::captureReference(unsigned channel) {
+    if (!model_.captureReference(channel))
+        return false;
+    if (object_)
+        lv_obj_invalidate(object_);
+    return true;
+}
+void WaveformWidget::clearReference() {
+    model_.clearReference();
+    if (object_)
+        lv_obj_invalidate(object_);
+}
+void WaveformWidget::clearHistory() {
+    model_.clearHistory();
+    if (object_)
+        lv_obj_invalidate(object_);
+}
+lv_area_t WaveformWidget::plotArea() const {
+    lv_area_t area{};
+    if (object_) lv_obj_get_coords(object_, &area);
+    return plot::Painter::plotArea(area);
+}
+void WaveformWidget::draw(lv_event_t *event) {
+    auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
+    lv_area_t area;
+    lv_obj_get_coords(self.object_, &area);
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_,
+                  self.held_ ? self.frozenAt_ : lv_tick_get(), self.inlineScales_)
+        .draw();
+}
+void WaveformWidget::geometry(lv_event_t *event) {
+    auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
+    if (lv_event_get_code(event) == LV_EVENT_DELETE)
+        self.object_ = self.note_ = nullptr;
+    else {
+        self.model_.clear();
+        lv_obj_invalidate(self.object_);
+    }
+}
+} // namespace openosc

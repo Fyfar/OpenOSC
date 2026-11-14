@@ -1,0 +1,62 @@
+#pragma once
+#include "openosc/scpi/backend.hpp"
+#include "openosc/acquisition/mailbox.hpp"
+
+namespace openosc {
+class ApplicationController;
+class InstrumentBackend final : public scpi::Backend {
+public:
+    explicit InstrumentBackend(ApplicationController &application);
+    bool multimeter() const override;
+    const ScopeRequest &scopeRequest() const override;
+    const scope::FrameMetadata *configuration() const override;
+    bool configureScope(const ScopeRequest &) override;
+    bool run(bool single) override;
+    bool autoScale() override;
+    bool forceTrigger() override;
+    uint32_t frameSequence() const override;
+    void stop() override;
+    bool held() const override;
+    bool waiting() const override;
+    const scope::FrameView *frame(bool refresh) override;
+    void releaseFrame() override;
+    void endSession() override;
+    const dmm::Result &meter() const override;
+    DataStatus meterStatus() const override;
+    bool selectFunction(dmm::Function) override;
+    bool setAuto(bool) override;
+    bool setRange(unsigned) override;
+    bool holdMeter(bool) override;
+    bool relativeMeter(bool) override;
+    dmm::StatisticsView meterStatistics() const override;
+    void resetMeterStatistics() override;
+    MeasurementMode screen() const override;
+    bool screen(MeasurementMode) override;
+    bool busy() const override;
+    uint32_t operationTimeoutMs() const override;
+    DataStatus operationStatus() const override;
+    generator::Snapshot generator() const override;
+    bool configureGenerator(const generator::Settings &) override;
+    bool output(bool) override;
+    bool remote() const override;
+    bool remote(bool) override;
+    bool performance(PerformanceSnapshot &) const override;
+    bool recovery() override;
+    uint32_t coreMhz() const override;
+    int coreMhz(uint32_t mhz) override;
+    bool counter(unsigned channel,scope::CounterReading &reading) const override;
+    scope::CaptureProgress captureProgress() const override;
+    const char *serial() const override { return serial_; }
+    const char *version() const override;
+private:
+    ApplicationController &application_;
+    scope::FrameLease lease_;
+    unsigned host_; // Its slot in DataAccess::frameHosts().
+    void demand() const; // This session reads records: the accepted one on show is kept for it.
+    uint64_t previousFrameTime_ = 0;
+    uint32_t previousFrameSequence_ = 0;
+    bool freshFrame_ = false;
+    mutable dmm::Result reading_;
+    char serial_[25]{};
+};
+} // namespace openosc

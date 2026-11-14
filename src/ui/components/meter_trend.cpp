@@ -1,0 +1,81 @@
+#include "openosc/ui/components/meter_trend.hpp"
+#include "openosc/ui/scope/format.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <iterator>
+#include <initializer_list>
+
+namespace openosc::ui {
+void MeterTrend::create(lv_obj_t *parent, const Theme &theme) {
+    root_ = lv_obj_create(parent); lv_obj_remove_style_all(root_);
+    lv_obj_set_pos(root_,0,22); lv_obj_set_size(root_, lv_pct(100), 30); lv_obj_set_scrollable(root_, false);
+    chart_ = lv_chart_create(root_); lv_obj_remove_style_all(chart_);
+    lv_obj_set_size(chart_, lv_pct(100), 30);
+    lv_obj_set_style_bg_opa(chart_, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(chart_, lv_color_hex(theme.background), 0);
+    lv_obj_set_style_border_width(chart_, 1, 0);
+    lv_obj_set_style_border_color(chart_, lv_color_hex(theme.grid), 0);
+    lv_obj_set_style_line_color(chart_, lv_color_hex(theme.grid), LV_PART_MAIN);
+    lv_obj_set_style_line_width(chart_, 1, LV_PART_MAIN);
+    lv_obj_set_style_line_width(chart_, 1, LV_PART_ITEMS);
+    lv_obj_set_style_width(chart_, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_height(chart_, 0, LV_PART_INDICATOR);
+    lv_chart_set_type(chart_, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(chart_, dmm::History::Capacity);
+    lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
+    lv_chart_set_div_line_count(chart_, 3, 6);
+    series_ = lv_chart_add_series(chart_, lv_color_hex(theme.accent), LV_CHART_AXIS_PRIMARY_Y);
+    lv_chart_set_series_ext_y_array(chart_, series_, values_);
+    range_ = Elements::label(root_, "", 0, 58);
+    reference_ = Elements::label(root_, "", 0, 74);
+    for (auto *label : {range_, reference_}) {
+        lv_obj_set_size(label, lv_pct(100), 14);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    }
+    lv_obj_set_hidden(range_,true); lv_obj_set_hidden(reference_,true);
+    lv_obj_set_style_text_color(reference_, lv_color_hex(theme.muted), 0);
+}
+void MeterTrend::palette(const MeterLook &look) {
+    const auto &palette = look.palette;
+    const auto set = [&](lv_color_t current, uint32_t wanted, auto apply) { if (!lv_color_eq(current, lv_color_hex(wanted))) apply(lv_color_hex(wanted)); };
+    set(lv_obj_get_style_bg_color(chart_, LV_PART_MAIN), look.color(MeterRole::Background), [&](lv_color_t c) { lv_obj_set_style_bg_color(chart_, c, 0); });
+    set(lv_obj_get_style_border_color(chart_, LV_PART_MAIN), palette.line, [&](lv_color_t c) {
+        lv_obj_set_style_border_color(chart_, c, 0); lv_obj_set_style_line_color(chart_, c, LV_PART_MAIN); });
+    const auto line = lv_color_hex(look.color(MeterRole::Bar));
+    if (!lv_color_eq(lv_chart_get_series_color(chart_, series_), line)) lv_chart_set_series_color(chart_, series_, line);
+    Elements::textColor(reference_, palette.muted);
+}
+void MeterTrend::update(const dmm::History *history, Quantity quantity, double reference, bool relative, bool peerRelative) {
+    std::fill(std::begin(values_), std::end(values_), LV_CHART_POINT_NONE);
+    const unsigned count = history ? history->size() : 0;
+    if (count < 2) {
+        lv_label_set_text(range_, "Need two valid samples"); lv_label_set_text(reference_, "");
+        lv_chart_refresh(chart_); return;
+    }
+    double first; history->value(0, first);
+    double minimum = first, maximum = first;
+    for (unsigned i = 1; i < count; ++i) {
+        double value; history->value(i, value);
+        minimum = std::min(minimum, value); maximum = std::max(maximum, value);
+    }
+    const double span = maximum - minimum;
+    for (unsigned i = 0; i < count; ++i) {
+        double value; history->value(i, value);
+        const double normalized = span > 0 && std::isfinite(span) ? (value - minimum) / span : .5;
+        values_[dmm::History::Capacity - count + i] = int(std::clamp(normalized, 0.0, 1.0) * 1000);
+    }
+    static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+    const char *unit = unsigned(quantity) < 6 ? units[unsigned(quantity)] : "";
+    char low[32], high[32], text[112];
+    plot::Format::quantity(minimum - (relative ? reference : 0), unit, low, sizeof low, 6);
+    plot::Format::quantity(maximum - (relative ? reference : 0), unit, high, sizeof high, 6);
+    std::snprintf(text, sizeof text, "%s .. %s / AUTO SCALE", low, high); lv_label_set_text(range_, text);
+    if (relative) {
+        plot::Format::quantity(reference, unit, low, sizeof low, 6);
+        std::snprintf(text, sizeof text, "REL reference %s", low);
+    } else if (peerRelative) std::snprintf(text, sizeof text, "REL reference: controller");
+    else std::snprintf(text, sizeof text, "%u samples / session history", count);
+    lv_label_set_text(reference_, text); lv_chart_refresh(chart_);
+}
+} // namespace openosc::ui

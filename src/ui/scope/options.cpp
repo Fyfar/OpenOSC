@@ -1,0 +1,39 @@
+#include "openosc/ui/scope/options.hpp"
+
+namespace openosc::plot {
+bool Options::valid() const {
+    if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() ||
+        unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom ||
+        zoom > 256 || pan < -1000 || pan > 1000 || triggerPosition > 1000 ||
+        (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
+        !averaging || averaging > 64 || (averaging & (averaging - 1)))
+        return false;
+    for (const auto &c : channels)
+        if (c.positionPermille < -1000 || c.positionPermille > 2000 || c.gainPercent < 1 ||
+            c.gainPercent > 6400 || c.width < 1 || c.width > 3)
+            return false;
+    const auto &c = cursors;
+    return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
+}
+void Options::restoreHeldView(const Options &saved) {
+    zoom = saved.zoom; zoomOut = saved.zoomOut; pan = saved.pan;
+    for (unsigned c = 0; c < 2; ++c) {
+        channels[c].gainPercent = saved.channels[c].gainPercent;
+        channels[c].positionPermille = saved.channels[c].positionPermille;
+    }
+}
+bool Options::sameTransform(const Options &b) const {
+    if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || pan != b.pan || lockTrigger != b.lockTrigger ||
+        triggerPosition != b.triggerPosition || averaging != b.averaging || math != b.math ||
+        reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
+        return false;
+    for (unsigned i = 0; i < 2; ++i) {
+        const auto &x = channels[i];
+        const auto &y = b.channels[i];
+        if (x.positionPermille != y.positionPermille || x.gainPercent != y.gainPercent ||
+            x.invert != y.invert || x.visible != y.visible)
+            return false;
+    }
+    return true;
+}
+} // namespace openosc::plot

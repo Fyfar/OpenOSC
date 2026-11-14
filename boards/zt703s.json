@@ -1,0 +1,16 @@
+{
+  "build": {
+    "cpu": "cortex-m7",
+    "f_cpu": "200000000L",
+    "mcu": "stm32h7b0vbt6"
+  },
+  "frameworks": [],
+  "name": "OpenOSC ZT703S",
+  "upload": {
+    "maximum_ram_size": 130816,
+    "maximum_size": 131072,
+    "protocol": "custom"
+  },
+  "url": "https://github.com/STMicroelectronics/STM32CubeH7",
+  "vendor": "OpenOSC"
+}

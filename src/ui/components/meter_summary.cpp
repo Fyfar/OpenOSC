@@ -1,0 +1,160 @@
+#include "openosc/ui/components/meter_summary.hpp"
+#include "openosc/ui/components/meter_reading.hpp"
+#include "openosc/ui/scope/format.hpp"
+#include "openosc/measurement/dmm/ranges.hpp"
+#include <algorithm>
+#include <initializer_list>
+#include <cstdio>
+
+namespace openosc::ui {
+void MeterSummary::create(lv_obj_t *parent) {
+    root_ = lv_obj_create(parent);
+    lv_obj_remove_style_all(root_);
+    lv_obj_set_size(root_, lv_pct(100), lv_pct(100));
+    lv_obj_set_scrollable(root_, false);
+    auto label = [&](const char *text, int x, int y, int width) {
+        auto *object = Elements::label(root_, text, x, y);
+        lv_obj_set_size(object, width, 16);
+        return object;
+    };
+    reference_ = label("Range unavailable", 0, 0, 150);
+    secondary_ = label("", 0, 0, 80);
+    range_ = label("", 0, 0, 58);
+    separator_ = lv_obj_create(root_);
+    lv_obj_remove_style_all(separator_);
+    lv_obj_set_style_bg_opa(separator_, LV_OPA_COVER, 0);
+    static constexpr const char *names[Columns] = {"MIN", "MAX", "AVG"};
+    for (unsigned c = 0; c < Columns; ++c) {
+        names_[c] = label(names[c], 0, 0, ColumnWidth);
+        values_[c] = label("", 0, 0, ColumnWidth);
+    }
+    compact_ = false;
+    arrange();
+    bar_.create(root_);
+    MeterLook look;
+    look.palette = {0, 0xe2e8f0, 0x94a3b8, 0x38bdf8, 0x243449, 0, 0xf87171};
+    for (auto &color : look.colors) color = look.palette.ink;
+    look.colors[unsigned(MeterRole::StatNames)] = look.palette.muted;
+    palette(look);
+}
+void MeterSummary::compact(bool on, int statsY) {
+    if (on == compact_ && statsY == statsY_) return;
+    compact_ = on; statsY_ = statsY;
+    arrange();
+}
+void MeterSummary::arrange() {
+    const auto place = [](lv_obj_t *object, int x, int y, int w, int h) { lv_obj_set_pos(object, x, y); lv_obj_set_size(object, w, h); };
+    if (compact_) {
+        place(reference_, CompactMetaX, 0, 108, CompactRow);
+        place(range_, CompactMetaX + 110, 0, 48, CompactRow);
+        place(secondary_, CompactMetaX + 158, 0, Width - CompactMetaX - 158, CompactRow);
+        lv_obj_set_style_text_align(range_, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_style_text_align(secondary_, LV_TEXT_ALIGN_RIGHT, 0);
+        for (unsigned c = 0; c < Columns; ++c) centre(c); // Placed again as the values change.
+    } else {
+        place(reference_, 0, 0, 150, 16);
+        place(secondary_, 154, 0, 80, 16);
+        place(range_, 238, 0, Width - 238, 16);
+        lv_obj_set_style_text_align(range_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_style_text_align(secondary_, LV_TEXT_ALIGN_LEFT, 0);
+        place(separator_, 0, 24, Width, 1);
+        for (unsigned c = 0; c < Columns; ++c) {
+            place(names_[c], columnX(c), NameY, ColumnWidth, 16);
+            place(values_[c], columnX(c), ValueY, ColumnWidth, ValueHeight);
+        }
+    }
+    lv_obj_set_hidden(separator_, compact_);
+}
+int MeterSummary::textWidth(lv_obj_t *label) {
+    lv_point_t size;
+    lv_text_get_size(&size, lv_label_get_text(label), lv_obj_get_style_text_font(label, LV_PART_MAIN), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return size.x;
+}
+// A compact column: the name and the value side by side, the pair centred in the column's third.
+void MeterSummary::centre(unsigned c) {
+    const int name = textWidth(names_[c]);
+    const int value = MeterReading::contentWidth(values_[c]);
+    const int x = columnX(c) + std::max(0, (ColumnWidth - name - CompactNameGap - value) / 2);
+    lv_obj_set_pos(names_[c], x, statsY_);
+    lv_obj_set_size(names_[c], name, CompactRow);
+    lv_obj_set_pos(values_[c], x + name + CompactNameGap, statsY_);
+    lv_obj_set_size(values_[c], std::max(1, std::min(value, ColumnWidth - name - CompactNameGap)), CompactRow);
+}
+namespace {
+constexpr MeterRole valueRoles[MeterSummary::Columns] = {MeterRole::Minimum, MeterRole::Maximum, MeterRole::Average};
+void font(lv_obj_t *label, const lv_font_t *font) {
+    if (lv_obj_get_style_text_font(label, LV_PART_MAIN) != font) lv_obj_set_style_text_font(label, font, 0);
+}
+} // namespace
+void MeterSummary::palette(const MeterLook &look) {
+    look_ = look;
+    for (unsigned c = 0; c < Columns; ++c) {
+        Elements::textColor(names_[c], look.color(MeterRole::StatNames));
+        font(names_[c], look.text(MeterRole::StatNames, CompactFont));
+        Elements::textColor(values_[c], look.color(valueRoles[c]));
+    }
+    Elements::textColor(reference_, look.color(MeterRole::Range));
+    Elements::textColor(secondary_, look.color(MeterRole::Secondary));
+    font(reference_, look.text(MeterRole::Range, CompactFont));
+    font(secondary_, look.text(MeterRole::Secondary, CompactFont));
+    font(range_, look.text(MeterRole::Mode, CompactFont));
+    if (compact_) for (unsigned c = 0; c < Columns; ++c) centre(c);
+    const auto line = lv_color_hex(look.palette.line);
+    if (!lv_color_eq(lv_obj_get_style_bg_color(separator_, LV_PART_MAIN), line)) lv_obj_set_style_bg_color(separator_, line, 0);
+    bar_.palette(look.palette);
+}
+void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
+void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
+                          double reference, bool relative, bool peerRelative) {
+    const double offset = relative ? reference : 0;
+    lv_label_set_text(secondary_, result.secondary.valid() ? result.secondaryText : "");
+    if (relative) {
+        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+        char value[32], text[48];
+        plot::Format::quantity(reference, units[unsigned(result.primary.quantity)], value, sizeof value, 6);
+        std::snprintf(text, sizeof text, "REL ref %s", value); lv_label_set_text(reference_, text);
+    } else if (peerRelative) lv_label_set_text(reference_, "REL ref: controller");
+    else if (const auto *range = dmm::Ranges::current(result)) {
+        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+        char value[32], text[48];
+        plot::Format::quantity(range->maximumSi, units[unsigned(result.primary.quantity)], value, sizeof value, 6);
+        std::snprintf(text, sizeof text, "Range %s", value); lv_label_set_text(reference_, text);
+    } else lv_label_set_text(reference_, "Range unavailable");
+    lv_label_set_text(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
+                              : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
+    lv_obj_set_style_text_color(range_, lv_color_hex(accent), 0);
+    // Statistics shown (On, not Trend): the names stay, and an empty period (after a reset, an
+    // overload or no reading, or of another quantity) shows "--" as the factory's placeholders.
+    const bool shown = statistics != nullptr;
+    const auto view = shown ? dmm::StatisticsView::of(*statistics, result.primary.quantity, offset) : dmm::StatisticsView{};
+    char texts[Columns][24] = {};
+    if (shown && !view.valid)
+        for (auto &text : texts) std::snprintf(text, sizeof text, "--");
+    if (view.valid) {
+        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+        const char *unit = units[unsigned(view.quantity)];
+        const double numbers[Columns] = {view.minimum, view.maximum, view.average};
+        for (unsigned c = 0; c < Columns; ++c)
+            if (!plot::Format::quantity(numbers[c], unit, texts[c], sizeof texts[c], 6)) std::snprintf(texts[c], sizeof texts[c], "----");
+    }
+    // One size for the three, each in its own typeface: the largest (ValueFont, then 12; compact:
+    // 12 beside the names) in which all three fit their columns, so they share a baseline.
+    unsigned size = compact_ ? CompactFont : ValueFont;
+    const auto fits = [&](unsigned c, unsigned candidate) {
+        const int room = compact_ ? ColumnWidth - textWidth(names_[c]) - CompactNameGap : ColumnWidth;
+        return MeterReading::fits(texts[c], room, look_.text(valueRoles[c], candidate));
+    };
+    for (; size > CompactFont; size = CompactFont) {
+        bool all = true;
+        for (unsigned c = 0; c < Columns; ++c) all = all && fits(c, size);
+        if (all) break;
+    }
+    for (unsigned c = 0; c < Columns; ++c) {
+        MeterReading::show(values_[c], texts[c], look_.text(valueRoles[c], size));
+        if (compact_) centre(c);
+        // Statistics Off or Trend: neither names nor values.
+        lv_obj_set_hidden(names_[c], !shown);
+        lv_obj_set_hidden(values_[c], !shown);
+    }
+}
+} // namespace openosc::ui

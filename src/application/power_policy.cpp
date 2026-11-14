@@ -1,0 +1,33 @@
+#include "openosc/application/controller.hpp"
+#include "openosc/platform/power.hpp"
+#include "openosc/usb/instrument_usb.hpp"
+
+namespace openosc {
+// The one place the backlight follows the settings: the working brightness, or while idle the
+// chosen idle level (never brighter than it). Headless: no backlight to drive.
+void ApplicationController::applyBrightness() {
+    if (uiReady_) PowerControl::brightness(dimmed_ ? prefs_.idle.dimmedBrightness(prefs_.brightness) : prefs_.brightness);
+}
+bool ApplicationController::servicePower(uint32_t keys,uint32_t now) {
+    battery_.poll(now);
+    if (uiReady_) { view_.batteryDisplay(prefs_.batteryDisplay); view_.battery(battery_.state()); }
+    const bool wake=keys && dimmed_;
+    if (keys) idle_.activity(now);
+    if (shutdown_!=Shutdown::None) return wake;
+    const auto low=lowBattery_.poll(battery_.state(),now);
+    if (low.warning && uiReady_) view_.notify("Low battery: power off in 20 seconds",now);
+    if (low.powerOff) {
+        confirmAction_=ShutdownAction::PowerOff; requestShutdown(now); return wake;
+    }
+    const bool inhibited=battery_.state().external || remote_ || (usb_ && usb_->connected()) || data_.generator().enabled() ||
+        autoBusy() || data_.zeroBusy() || shots_.busy() || imageReader_.busy() || images_.clearing() || data_.scopeRecording() || data_.meterLogger().active() || data_.meterSerial().enabled();
+    const auto state=idle_.poll(now,inhibited);
+    if (state.dimmed!=dimmed_) {
+        dimmed_=state.dimmed;
+        applyBrightness();
+    }
+    if (state.warning && uiReady_) view_.notify("Idle power off in 20 seconds",now);
+    if (state.powerOff) { confirmAction_=ShutdownAction::PowerOff; requestShutdown(now); }
+    return wake;
+}
+} // namespace openosc

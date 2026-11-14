@@ -1,0 +1,75 @@
+#include "openosc/ui/editors/meter_properties.hpp"
+#include <cstdio>
+#include "openosc/ui/format/meter.hpp"
+#include "openosc/ui/components/meter_style.hpp"
+#include "openosc/settings/instrument_preferences.hpp"
+
+namespace openosc::ui {
+PropertyKind MeterProperties::kind(unsigned row) const {
+    switch (row) {
+    case Range: case Display: case Colors: case Digits: return PropertyKind::Choice;
+    case ResetStatistics: return PropertyKind::Action;
+    case Appearance: return PropertyKind::Page; // Its own list (MeterAppearanceProperties).
+    default: return PropertyKind::Toggle;
+    }
+}
+void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
+    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Statistics", "Relative",
+                                            "Reset statistics", "CSV logging", "Serial 115200"};
+    std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
+}
+unsigned MeterProperties::options(unsigned row) const {
+    switch (row) {
+    case Range: return 2;
+    case Display: return MeterPreferences::Displays;
+    case Colors: return MeterPreferences::Palettes;
+    case Digits: return MeterPreferences::Faces;
+    default: return kind(row) == PropertyKind::Toggle ? 2 : 0;
+    }
+}
+unsigned MeterProperties::option(unsigned row) const {
+    switch (row) {
+    case Range: return automatic() ? 0 : 1;
+    case Display: return display_;
+    case Colors: return palette_;
+    case Digits: return face_;
+    case Statistics: return statistics_;
+    case Relative: return relative_;
+    case Logging: return logging_;
+    case SerialOutput: return serial_;
+    default: return 0;
+    }
+}
+void MeterProperties::optionName(unsigned row, unsigned index, char *output, size_t capacity) const {
+    static constexpr const char *displays[] = {"Primary", "Statistics", "Trend", "Analog"};
+    switch (row) {
+    case Range: std::snprintf(output, capacity, "%s", index ? "Manual" : "Auto"); break;
+    case Display: std::snprintf(output, capacity, "%s", displays[index < MeterPreferences::Displays ? index : 0]); break;
+    case Colors: std::snprintf(output, capacity, "%s", MeterStyles::paletteName(index)); break;
+    case Digits: std::snprintf(output, capacity, "%s", MeterStyles::faceName(index)); break;
+    default: PropertyList::optionName(row, index, output, capacity); break;
+    }
+}
+void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
+    if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
+    else if (row == SerialOutput && jackBusy_) std::snprintf(output, capacity, "GEN on");
+    else PropertyList::value(row, output, capacity);
+}
+// The choices are taken at once by the controller (meterChanged), which compares them with the
+// instrument and reports what it could not apply.
+bool MeterProperties::choose(unsigned row, unsigned index) {
+    if (index >= options(row)) return false;
+    switch (row) {
+    case Range: result_.range = index ? dmm::RangeMode::Manual : dmm::RangeMode::Auto; break;
+    case Display: display_ = index; break;
+    case Colors: palette_ = index; break;
+    case Digits: face_ = index; break;
+    case Statistics: statistics_ = index; break;
+    case Relative: relative_ = index; break;
+    case Logging: logging_ = index; break;
+    case SerialOutput: serial_ = index; break;
+    default: return false;
+    }
+    return true;
+}
+} // namespace openosc::ui

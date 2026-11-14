@@ -1,0 +1,248 @@
+#pragma once
+#include "openosc/application/state.hpp"
+#include "openosc/application/preferences_result.hpp"
+#include "openosc/input/gestures.hpp"
+#include "openosc/instrument/data_access.hpp"
+#include "openosc/screenshot/writer.hpp"
+#include "openosc/screenshot/catalog.hpp"
+#include "openosc/screenshot/reader.hpp"
+#include "openosc/settings/preferences_file.hpp"
+#include "openosc/settings/theme_store.hpp"
+#include "openosc/ui/application_view.hpp"
+#include "openosc/ui/lvgl_display.hpp"
+#include "openosc/ui/editors/trigger_editor.hpp"
+#include "openosc/ui/editors/meter_properties.hpp"
+#include "openosc/ui/editors/meter_appearance_properties.hpp"
+#include "openosc/ui/editors/scope_editor.hpp"
+#include "openosc/application/readout_scheduler.hpp"
+#include "openosc/application/run_mode_switch.hpp"
+#include "openosc/ui/editors/measurement_editor.hpp"
+#include "openosc/ui/editors/generator_editor.hpp"
+#include "openosc/acquisition/auto_setup.hpp"
+#include "openosc/acquisition/trigger_level.hpp"
+#include "openosc/ui/scope/cursor_control.hpp"
+#include "openosc/data/performance.hpp"
+#include "openosc/platform/shutdown.hpp"
+#include "openosc/ui/editors/confirmation.hpp"
+#include "openosc/ui/editors/property_navigator.hpp"
+#include "openosc/ui/scope/display_properties.hpp"
+#include "openosc/platform/battery_monitor.hpp"
+
+namespace openosc {
+class InstrumentBackend;
+class InstrumentUsb;
+class ApplicationController {
+public:
+    ApplicationController(LvglDisplay &display, NorFlash &nor, Filesystem &fs, PreferencesFile &preferences,
+                          ThemeStore &themes, ScreenshotWriter &shots, DataAccess &data)
+        : display_(display), nor_(nor), fs_(fs), preferences_(preferences), themes_(themes), shots_(shots),
+          data_(data), images_(fs),imageReader_(fs) {}
+    [[noreturn]] void run();
+    enum class ModeChange : uint8_t { Selected, Busy, Refused };
+
+private:
+    friend class InstrumentBackend;
+    friend class ScopeControllerProbe; // Native tests drive the key handlers directly.
+    bool setRemote(bool enabled);
+    ModeChange selectMode(MeasurementMode next, uint32_t now); // MODE key and SYST:MODE.
+    InstrumentUsb *usb_ = nullptr;
+    // remote_: USB Remote control (keys locked except MENU/REL hold exits, no idle power-off);
+    // the display keeps running. uiReady_: the LVGL UI exists — every view update, render and
+    // notification depends on it; false only for the headless fallback of a failed display init.
+    bool remote_ = false, uiReady_ = false;
+    PerformanceCounter performance_;
+    void onKeys(const KeyEvents &events, uint32_t now);
+    void settingsKeys(uint32_t keys, uint32_t now);
+    void showSettings();
+    void closeSettings();
+    void settingsAction(ui::SettingsAction action, uint32_t now);
+    // The run mode (core clock) changed in place (RunModeSwitch); the menu, SCPI and Remote share it.
+    // With `persist` the setting is stored when the target runs; Remote's changes are transient.
+    RunModeSwitch::Result changeRunMode(uint32_t mode, uint32_t now, bool persist = true);
+    void recoveryFromSettings(uint32_t now);
+    void serviceRecovery(uint32_t now);
+    bool recoveryPending_=false;
+    uint32_t recoveryAt_=0;
+    void confirmShutdown(ShutdownAction action);
+    using ConfirmHandler=void (ApplicationController::*)(uint32_t);
+    void confirmOperation(const ui::Confirmation &question,ConfirmHandler handler);
+    void restoreSettings(uint32_t now);
+    void openImages(uint32_t now);
+    void showImages();
+    void loadImage(uint32_t now);
+    void imageKeys(uint32_t keys,uint32_t now);
+    void serviceImages(uint32_t now);
+    void deleteImage(uint32_t now);
+    void clearImages(uint32_t now);
+    void closeImages();
+    void beginZero(uint32_t now,bool hardware);
+    void beginSoftwareZero(uint32_t now) { beginZero(now,false); }
+    void beginHardwareZero(uint32_t now) { beginZero(now,true); }
+    void disableZero(uint32_t now);
+    void zeroKeys(uint32_t keys,uint32_t now);
+    // Gain (Settings / Scope calibration / Gain) and the ZT706S interleave offset.
+    void confirmGain(uint32_t now);
+    void beginGain(uint32_t now);
+    void disableGain(uint32_t now);
+    void gainKeys(uint32_t keys,uint32_t now);
+    void interleaveAction(ui::SettingsAction action,uint32_t now);
+    ui::SettingsProperties settingsRows() const; // With the calibration pages' draft and status.
+    ui::CalibrationDraft calibrationDraft_;
+    char gainQuestion_[2][40]{}; // The gain confirmation's texts (Confirmation keeps pointers).
+    void serviceZeroUi(uint32_t now);
+    bool zeroWatched_=false;
+    uint32_t zeroProgress_=UINT32_MAX;
+    ConfirmHandler confirmationHandler_=nullptr;
+    bool confirmationImages_=false;
+    bool confirmationZero_=false;
+    bool confirmationSettings_=false;
+    ui::Confirmation confirmation_{ShutdownAction::PowerOff};
+    void confirmationKeys(uint32_t keys, uint32_t now);
+    void requestShutdown(uint32_t now);
+    void serviceShutdown(uint32_t now);
+    bool servicePower(uint32_t keys,uint32_t now);
+    IdlePolicy idle_;
+    BatteryMonitor battery_;
+    power::LowBatteryPolicy lowBattery_;
+    bool dimmed_=false;
+    using Shutdown = ShutdownAction;
+    Shutdown shutdown_ = Shutdown::None;
+    ShutdownAction confirmAction_ = ShutdownAction::PowerOff;
+    uint32_t shutdownAt_ = 0;
+    void changed(uint32_t now);
+    void store(uint32_t now);
+    void applyPreferences();
+    PreferencesResult applyDataPreferences();
+    enum class ScopeApply : uint8_t { Configure, StageIfHeld, Resume };
+    bool applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode = ScopeApply::Configure);
+    bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode);
+    bool applyEdited(ScopeRequest request, uint32_t now);
+    bool changePlotMode(plot::Options &options, plot::Mode before, uint32_t now);
+    bool channelShown(unsigned channel);
+    // Moves the scale/position selection off a channel that is not shown; true when it moved.
+    bool followShownChannel();
+    void panelKeys(uint32_t keys, uint32_t now, bool fine);
+    void setScopeFocus(plot::Focus focus);
+    void syncCursorFocus();
+    void openAnalyze(unsigned row);
+    void enterCursors(uint32_t now);
+    void showTrigger(const scope::FrameMetadata *shown);
+    void beginHeldView();
+    void moveTrace(uint32_t keys, uint32_t now, bool fine);
+    void moveCursor(uint32_t keys, uint32_t now, bool fine);
+    bool triggerMidpoint(uint32_t now);
+    bool centerChannels(uint32_t now); // Analyze -> Center channels, F2 hold.
+    bool applyGenerator(const generator::Settings &settings, uint32_t now);
+    void dataKeys(uint32_t keys, uint32_t now, bool fine);
+    void displayData(uint32_t now);
+    void plotKeys(uint32_t keys, uint32_t now, bool fine);
+    void scopeKeys(uint32_t keys, uint32_t now, bool fine);
+    void meterKeys(uint32_t keys, uint32_t now);
+    void meterRangeHold(uint32_t now); // AUTO/RANGE held in the DMM.
+    void applyBrightness();
+    void shutdownNotice(const char *text, uint32_t now);
+    void generatorKeys(uint32_t keys, uint32_t now);
+    void triggerKeys(uint32_t keys, uint32_t now);
+    void frequencyKeys(uint32_t keys, uint32_t now);
+    void meterPanelKeys(uint32_t keys, uint32_t now);
+    void meterChanged(uint32_t now); // The DMM panel's choices, taken at once.
+    ui::MeterProperties meterProperties() const;
+    void meterAppearanceKeys(uint32_t keys, uint32_t now);
+    void refreshMeterPanel();
+    void analyzeKeys(uint32_t keys, uint32_t now);
+    void scopeEditorKeys(uint32_t keys, uint32_t now);
+    void measurementKeys(uint32_t keys, uint32_t now);
+    void generatorEditorKeys(uint32_t keys, uint32_t now);
+    void startAuto(uint32_t now);
+    void serviceAuto(uint32_t now);
+    bool cancelAuto(uint32_t now,bool hold=false);
+    bool autoBusy() const { return autoSetup_.state()!=scope::AutoSetup::State::Idle; }
+    bool restoreAuto();
+    void serviceInstruments(uint32_t now);
+    void queuePlotSave(uint32_t now);
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, Analyze, Channel, Acquisition, Measurements, Generator, Confirmation, Images, Zero };
+    Panel panel_ = Panel::None;
+    // Every property panel and Settings: one navigator (only one is open at a time).
+    ui::PropertyNavigator navigator_;
+    void openPanel(Panel panel, const ui::PropertyList &list, unsigned row = 0);
+    void closePanel();
+    // Settings or a panel left by another key than its own (MODE, Remote, power off): an edit ends
+    // as on F4. A Settings number (brightness, applied live) returns to the value it began with;
+    // a panel's unfinished number goes with the panel (its steps were never applied). True if a
+    // Settings value was restored.
+    bool dropEdit(uint32_t now);
+    // The keys of a property panel, field by field (PropertyNavigator): a committed field
+    // (Committed) or an action row (Action) is the caller's to apply; F4/Left in Browse close the
+    // panel, keeping every field committed before. A number's steps are only redrawn.
+    enum class FieldKey : uint8_t { None, Committed, Action, Closed };
+    FieldKey fieldKeys(uint32_t keys, ui::PropertyList &list, uint32_t now);
+    // The Channel/Acquisition editor's committed field to the instrument; the editor then shows what
+    // the instrument took (or, refused, what it has).
+    void commitScopeEditor(ui::ScopeEditor &editor, uint32_t now);
+    void commitTrigger(uint32_t now);
+    void triggerSource(uint32_t now); // F3 again in Trigger focus: the other enabled channel.
+    // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;
+    // refused, the drafts return to the view in force.
+    bool applyDisplay(unsigned row, uint32_t now);
+    void applySettings(const Preferences &chosen, uint32_t now); // What a Settings choice changed.
+    ui::TriggerEditor triggerEditor_;
+    ui::FrequencyEditor frequencyEditor_;
+    ui::ChannelEditor channelEditor_;
+    ui::AcquisitionEditor acquisitionEditor_;
+    ui::MeasurementEditor measurementEditor_;
+    ui::GeneratorEditor generatorEditor_;
+    scope::AutoSetup autoSetup_;
+    ReadoutScheduler readouts_;
+    bool autoWasHeld_ = false;
+    bool autoCancelled_ = false;
+    bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
+    bool meterRestore_ = false;
+    DataStatus lastSelection_ = DataStatus::NoData;
+    ui::MeterProperties meterEditor_{dmm::Result{}};
+    ui::MeterAppearanceProperties appearanceEditor_;
+    plot::Focus focus_ = plot::Focus::Scale;
+    plot::CursorControl cursors_;
+    scope::TriggerFollow triggerFollow_;
+    bool themePending_ = false;
+    uint32_t themeAt_ = 0;
+    plot::Controls plotControls_;
+    void render();
+    void prepareColumns();
+    scope::FrameLease ahead_; // The next frame, looked at during one refresh (prepareColumns).
+    bool rendering_ = false;  // Inside render(): not lv_refr_now of a screenshot.
+    LvglDisplay &display_;
+    NorFlash &nor_;
+    Filesystem &fs_;
+    PreferencesFile &preferences_;
+    ThemeStore &themes_;
+    ScreenshotWriter &shots_;
+    DataAccess &data_;
+    ApplicationState state_;
+    Preferences prefs_;
+    ApplicationView view_;
+    screenshot::ImageCatalog images_;
+    screenshot::ImageReader imageReader_;
+    bool imageShowing_=false, imageFullSize_=false;
+    void startScreenshot(uint32_t now);
+    unsigned shotProgress_=0;
+    unsigned imageProgress_=0;
+    ui::SettingsMenu settingsMenu_;
+    DeviceInfo settingsInfo_;
+    bool savePending_ = false;
+    uint32_t saveAt_ = 0;
+    static constexpr uint32_t OverlaySettleMs = 60;
+    uint32_t hiddenAt_ = 0xffff0000U;
+    uint32_t fpsAt_ = 0, fpsFlushes_ = 0;
+    uint32_t dataAt_ = 0, lastScopeSequence_ = 0, lastMeterSequence_ = 0;
+    uint32_t meterBarAt_ = 0;
+    unsigned selectedChannel_ = 0;
+    bool dataRefresh_ = true;
+    generator::Snapshot lastGenerator_;
+    DataStatus lastMeterStatus_ = DataStatus::NoData;
+    DataStatus lastScopeStatus_ = DataStatus::NoData;
+    bool lastMeterHold_ = false, lastScopeHold_ = false;
+    plot::Options heldView_;
+    bool heldViewActive_ = false;
+    uint32_t heldViewRelease_ = 0;
+};
+} // namespace openosc

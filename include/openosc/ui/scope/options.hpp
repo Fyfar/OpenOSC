@@ -1,0 +1,65 @@
+#pragma once
+#include <cstdint>
+#include "openosc/acquisition/spectrum.hpp"
+
+namespace openosc::plot {
+constexpr unsigned MaximumWidth = 320, MaximumHeight = 240, MaximumXYPoints = 640;
+constexpr int16_t Missing = -32768;
+constexpr uint16_t InfinitePersistence=65535;
+enum class Mode : uint8_t { Time, XY, Spectrum, SpectrumOverlay };
+enum class Style : uint8_t { Vectors, Points, Envelope };
+enum class Grid : uint8_t { Full, Major, Axes, None };
+enum class Math : uint8_t { Off, Add, Subtract };
+// Samples of a column: Peak (its extremes), Mean (HD: their average), Adaptive (each trace takes
+// Mean when its columns hold only noise around a slower signal, else Peak: Model::effectiveMean).
+enum class Reduction : uint8_t { Peak, Mean, Adaptive };
+enum class Interpolation : uint8_t { Linear, Sinc, Spline };
+enum class Focus : uint8_t { Scale, Position, Trigger, Cursor }; // What the arrows act on: F1..F4.
+enum class CursorLine : uint8_t { None, TimeA, TimeB, LevelA, LevelB };
+struct ChannelOptions {
+    int16_t positionPermille = 500;
+    uint16_t gainPercent = 100;
+    uint8_t width = 1, opacity = 255;
+    bool visible = true, invert = false;
+};
+struct CursorOptions {
+    uint16_t xA = 250, xB = 750, yA = 250, yB = 750;
+    uint8_t channel = 0;
+    bool time = false, voltage = false;
+};
+// Cursor positions are thousandths of the plot, so they survive a change of its size.
+inline int cursorPixel(unsigned permille, int span) { return int((int64_t(permille) * span + 500) / 1000); }
+struct Options {
+    Mode mode = Mode::Time;
+    Style style = Style::Vectors;
+    Grid grid = Grid::Full;
+    Math math = Math::Off;
+    Reduction reduction = Reduction::Peak;
+    Interpolation interpolation = Interpolation::Linear;
+    ChannelOptions channels[2];
+    CursorOptions cursors;
+    scope::SpectrumOptions spectrum;
+    uint16_t zoom = 1, triggerPosition = 250, persistenceMs = 0;
+    int16_t pan = 0;
+    uint8_t averaging = 1, zoomOut = 1; // zoomOut views more than one screen of a longer record.
+    bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,
+         showScale = true;
+    bool valid() const;
+    bool sameTransform(const Options &other) const;
+    // What HOLD may change to explore one record; a new capture starts from `saved` again.
+    void restoreHeldView(const Options &saved);
+};
+struct Point {
+    int16_t x = Missing, y = Missing;
+};
+// First, two chronological extrema, last. Missing never becomes an on-screen zero.
+struct Column {
+    int16_t first = Missing, a = Missing, b = Missing, last = Missing;
+};
+struct Trace {
+    Column columns[MaximumWidth];
+    int16_t zero = 0;
+    bool enabled = false, clippedTop = false, clippedBottom = false, adcClipped = false;
+    bool mean = false; // Its columns show the average of their samples (HD or frame averaging), not their extremes.
+};
+} // namespace openosc::plot
