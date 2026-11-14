@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/handoff.hpp"
@@ -7,7 +8,7 @@
 
 int main() {
     using namespace openosc;
-    if (!Board::initialize()) while (true) Board::service();
+    if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     Board::delay(30);
     const bool requestedByApp = RecoveryRequest::take();
@@ -21,7 +22,7 @@ int main() {
 #endif
     if (!screen.initialize()) {
         boot_diagnostics.error = 2;
-        while (true) Board::service();
+        Watchdog::fatal(2);
     }
     boot_diagnostics.stage = 3;
     screen.text(8, 10, "OPENOSC RECOVERY", Display::Cyan);
@@ -33,7 +34,9 @@ int main() {
     UsbMassStorage usb(disk);
     FatCheckOperation fatCheck(disk, screen);
     bool ready = nor.initialize() && disk.initialize();
+    Watchdog::progress();
     // Before FatFs mounts: the dirty flag of an unfinished host session and the factory label.
+    Watchdog::expect(RecoveryController::LongOperationMs);
     const bool reconciled = !ready || fatCheck.reconcile();
     if (ready) fs.mountPrepared();
     RecoveryController controller(screen, nor, fs, usb, update, fatCheck, disk, ready);

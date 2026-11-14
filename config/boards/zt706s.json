@@ -3,5 +3,5 @@
   "name": "ZT706S",
   "model": 706,
   "image_board_id": "0x37303653",
-  "flash_end": "0x080E0000"
+  "flash_end": "0x08200000"
 }

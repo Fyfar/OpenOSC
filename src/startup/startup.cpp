@@ -1,4 +1,6 @@
 #include "openosc/platform/board.hpp"
+#include "openosc/platform/reset_record.hpp"
+#include "openosc/platform/system_reset.hpp"
 extern "C" {
 extern uint32_t _estack, _sitext, _stext, _etext, _sidata, _sdata, _edata, _sbss, _ebss;
 #ifdef OPENOSC_APPLICATION
@@ -53,16 +55,42 @@ void Reset_Handler() {
     main();
     for (;;) {}
 }
-void Default_Handler() {
-    openosc::boot_diagnostics.error = 0x10000000 | (SCB->ICSR & 0x1ff);
-    while (true) openosc::Board::service();
+// Fatal exceptions (docs/WATCHDOG.md): record why, then reset at once. Nothing here calls a function
+// or feeds a watchdog; if the reset request itself failed, the unfed IWDG resets within its timeout,
+// and a fault inside this code locks the core up, which the IWDG ends the same way.
+namespace {
+using openosc::ResetRecord;
+__attribute__((always_inline)) inline void record(ResetRecord::Cause cause, uint32_t pc, uint32_t stackedLr,
+                                                  uint32_t excReturn, uint32_t detail) {
+    volatile ResetRecord &r = ResetRecord::retained();
+    r.cause = uint32_t(cause);
+#ifdef OPENOSC_APPLICATION
+    r.source = uint32_t(ResetRecord::Source::Application);
+#else
+    r.source = uint32_t(ResetRecord::Source::Recovery);
+#endif
+    r.pc = pc; r.lr = stackedLr; r.excReturn = excReturn;
+    r.cfsr = SCB->CFSR; r.hfsr = SCB->HFSR; r.detail = detail;
+    ResetRecord::seal(r);
 }
+} // namespace
+void Default_Handler() {
+    const uint32_t vector = SCB->ICSR & 0x1ff;
+    openosc::boot_diagnostics.error = 0x10000000 | vector;
+    record(ResetRecord::Cause::Interrupt, 0, 0, 0, vector);
+    openosc::SystemReset::now();
+}
+// The stacked frame is read only within DTCM (ExceptionFrame): a corrupt stack pointer leaves PC/LR 0
+// and detail 1 instead of faulting again.
 __attribute__((used)) void fault_capture(uint32_t* frame, uint32_t lr) {
+    const bool readable = openosc::ExceptionFrame::readable(reinterpret_cast<uintptr_t>(frame));
+    const uint32_t pc = readable ? frame[6] : 0, stackedLr = readable ? frame[5] : 0;
     openosc::boot_diagnostics.stage = 0xdead;
-    openosc::boot_diagnostics.faultPc = frame[6];
+    openosc::boot_diagnostics.faultPc = pc;
     openosc::boot_diagnostics.faultLr = lr;
     openosc::boot_diagnostics.faultCfsr = SCB->CFSR;
-    while (true) openosc::Board::service();
+    record(ResetRecord::Cause::Fault, pc, stackedLr, lr, readable ? 0 : 1);
+    openosc::SystemReset::now();
 }
 __attribute__((naked)) void HardFault_Handler() {
     __asm volatile("tst lr, #4\n ite eq\n mrseq r0, msp\n mrsne r0, psp\n mov r1, lr\n b fault_capture");

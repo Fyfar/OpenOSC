@@ -9,6 +9,6 @@ struct Zt706sIdentity {
     static constexpr const char *InstrumentProduct = "ZT706S Instruments";
     static constexpr const char *AboutText = "ZT706S / STM32H7B0";
     static constexpr uint32_t ImageBoardId = 0x37303653;
-    static constexpr uint32_t FlashEnd = 0x080E0000;
+    static constexpr uint32_t FlashEnd = 0x08200000;
 };
 } // namespace openosc::board

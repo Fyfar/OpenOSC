@@ -68,7 +68,7 @@ Captured on a ZT703S running OpenOSC.
 - DC/AC voltage, millivolts, DC/AC current and milliamps, resistance, continuity, diode, capacitance
 - Auto and manual ranges, HOLD and REL
 - Statistics, trend chart and CSV logging
-- Bar graph scaled to ±25,000 counts
+- Bar graph and analog dial scaled to the meter's range: 25,000 counts on ZT703S, 66,000 on ZT706S
 
 **Signal generator**
 
@@ -96,6 +96,7 @@ Captured on a ZT703S running OpenOSC.
   the firmware. You can edit the files from a computer, and a corrupted file is renamed and
   replaced with defaults.
 - Hold-to-power-off with a progress bar
+- Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**
 

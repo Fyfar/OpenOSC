@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/clocks.hpp"
@@ -8,7 +9,7 @@
 
 int main() {
     using namespace openosc;
-    if (!Board::initialize()) while (true) Board::service();
+    if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     NorFlash nor;
     BlockDevice disk(nor);
@@ -17,12 +18,14 @@ int main() {
         fs.mountPrepared();
         boot_diagnostics.flashStatus=fs.result();
     }
+    Watchdog::progress(); // Boot stages are the boot's progress (one pass, WatchdogPolicy::OperationMs).
     PreferencesFile preferences(fs);
     preferences.load();
+    Watchdog::progress();
     if (!ClockControl::selectPerformance(preferences.values().scope.runMode)) {
         boot_diagnostics.error=4;
         // Keep a usable instrument if the profile cannot be locked; no high-rate metadata is fabricated.
-        if (!ClockControl::selectPerformance(0)) while (true) Board::service();
+        if (!ClockControl::selectPerformance(0)) Watchdog::fatal(4);
     }
 #ifdef OPENOSC_USB_TRACE
     // Both the DWT timestamp scale and TIM7 divider depend on the selected profile.

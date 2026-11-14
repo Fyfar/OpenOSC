@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/recovery/controller.hpp"
 #include "openosc/storage/layout.hpp"
 #include "openosc/platform/input.hpp"
@@ -54,6 +55,7 @@ void RecoveryController::confirmKey(uint32_t key) {
     else if ((key & Keypad::Menu) && yes_) perform();
 }
 void RecoveryController::perform() {
+    Watchdog::expect(LongOperationMs);
     if (action_ == Action::Update) {
         screen_.clear();
         bool success = update_.install(imagePath_);

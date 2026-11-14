@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/power.hpp"
 #include "openosc/platform/control_latch.hpp"
@@ -30,6 +31,6 @@ void PowerControl::backlight(bool enabled) {
     backlight(false);
     ControlLatch::write(0); // Clear both power-enable bits and disable the analog outputs.
     __disable_irq();
-    while (true) { Board::service(); __WFI(); }
+    Watchdog::park();
 }
 }

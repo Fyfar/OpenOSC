@@ -3,6 +3,7 @@ build/
 __pycache__/
 *.pyc
 
+# PlatformIO writes absolute local paths into these: never into the public repository.
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch

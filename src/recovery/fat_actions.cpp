@@ -1,8 +1,10 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/recovery/controller.hpp"
 #include "openosc/platform/input.hpp"
 
 namespace openosc {
 void RecoveryController::checkFat() {
+    Watchdog::expect(LongOperationMs);
     if (!storageReady_ || !fs_.unmount()) { message("FAT CHECK FAILED", "STORAGE NOT READY"); return; }
     if (!fatCheck_.inspect()) { message("FAT CHECK FAILED", fatCheck_.error()); return; }
     state_ = State::FatReport;

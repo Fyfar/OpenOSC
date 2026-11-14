@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/display/display.hpp"
 #include "openosc/font.hpp"
@@ -50,7 +51,9 @@ void Display::progress(const char* stage, uint32_t done, uint32_t total) {
     rectangle(8, 184, percent > 100 ? 304 : percent * 304 / 100, 10, Green);
     number(8, 204, percent); text(30, 204, "/100");
     boot_diagnostics.progress = percent;
-    present(); Board::service();
+    present();
+    Watchdog::progress(); // Recovery's progress screens report real steps (update, backup, FAT check).
+    Board::service();
 }
 }
 

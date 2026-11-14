@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/board/current.hpp"
 #include "openosc/measurement/dmm/function.hpp"
 
 namespace openosc::dmm {
@@ -9,7 +10,9 @@ struct RangeInfo {
 };
 class Ranges {
 public:
+    // The board's ranges of a function (board::Current), in RANGE order; the other model's for tests.
     static const RangeInfo *list(Function function, unsigned &count);
+    static const RangeInfo *list(Function function, board::DmmCounts counts, unsigned &count);
     static const RangeInfo *current(const Result &result, unsigned *index = nullptr);
     static bool choose(Function function, double maximumSi, unsigned &index);
 };

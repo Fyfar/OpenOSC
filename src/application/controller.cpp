@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/storage/layout.hpp"
 #include "openosc/platform/board.hpp"
@@ -33,6 +34,7 @@ namespace openosc {
     diag::LocalControl local(localBackend);
 #endif
     uiReady_ = display_.initialize();
+    Watchdog::progress();
     // While a refresh waits on DMA2D: the watchdog, queued USB transfers and the acquisition
     // streams go on (no LVGL, FAT or UI state there; see RenderIdle).
     RenderIdle::install([](void *context, uint32_t now) {
@@ -46,6 +48,7 @@ namespace openosc {
     boot_diagnostics.stage = 10;
     if (uiReady_) {
         if (!prefs_.useBuiltinTheme) themes_.reload();
+        Watchdog::progress();
         view_.build(themes_.theme()); view_.measurement(state_);
         applyBrightness();
         char result[112]; applied.text(result,sizeof result);
@@ -69,6 +72,7 @@ namespace openosc {
     InputService::enable();
     while (true) {
         performance_.tick(DWT->CYCCNT);
+        Watchdog::heartbeat(); // The one proof that the application's loop goes on (docs/WATCHDOG.md).
         Board::service();
         const uint32_t now = Board::milliseconds();
         data_.poll(now);

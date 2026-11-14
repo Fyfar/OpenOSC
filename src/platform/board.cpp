@@ -2,6 +2,7 @@
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/dma_memory.hpp"
+#include "openosc/platform/watchdog.hpp"
 #ifdef OPENOSC_APPLICATION
 #include "openosc/board/current.hpp"
 #include "openosc/platform/input_service.hpp"
@@ -15,6 +16,14 @@ namespace openosc {
 bool Board::initialize() {
     boot_diagnostics.magic = 0x4f534342;
     boot_diagnostics.stage = 1;
+    // First: from here on this image owns the watchdog (docs/WATCHDOG.md), and the previous run's
+    // cause is read before anything else can overwrite it.
+    Watchdog::start();
+#ifdef OPENOSC_APPLICATION
+    ResetDiagnostics::capture(true);
+#else
+    ResetDiagnostics::capture(false);
+#endif
     // Discard interrupt configuration inherited from the previous firmware.
     for (unsigned n = 0; n < 8; ++n) { NVIC->ICER[n] = 0xffffffff; NVIC->ICPR[n] = 0xffffffff; }
     SysTick->CTRL = 0;
@@ -57,10 +66,9 @@ bool Board::initialize() {
     return true;
 }
 
+// Servicing while waiting: not a proof of progress (Watchdog::heartbeat/progress are).
 void Board::service() {
-    IWDG1->KR = 0xaaaa;
-    const auto counter = WWDG1->CR;
-    if ((counter & 0x80) && ((counter & 0x7f) <= (WWDG1->CFR & 0x7f))) WWDG1->CR = 0xff;
+    Watchdog::service(HAL_GetTick(), reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     ++boot_diagnostics.heartbeat;
 }
 uint32_t Board::milliseconds() { return HAL_GetTick(); }

@@ -6,15 +6,15 @@
 
 namespace openosc::ui {
 // A moving-coil panel meter: a wide arc whose radius follows the face's width (the pivot is below
-// the face), the numbers above it, the bar's 0-25 scale (thousands
-// of counts of the range), a needle with NeedleMotion inertia. Like the bar, the needle shows the
+// the face), the numbers above it, the bar's scale (thousands of counts of the
+// range: 0-25 on the ZT703S, 0-66 on the ZT706S, dmm::BoardScale), a needle with NeedleMotion inertia. Like the bar, the needle shows the
 // magnitude and a separate minus marks a negative reading; OL pegs it right in the alert colour;
 // no data lets it fall back to zero; stale and HOLD keep it where it is and say so.
 // service() advances the needle by the real elapsed time and invalidates only the needle's
 // old and new strip, at most once per FrameMs; hidden or settled, it costs nothing.
 class AnalogDial {
 public:
-    static constexpr int Scale = 25, Major = 5;            // Scale labels 0..25, a long tick every 5.
+    static constexpr int Scale = dmm::BoardScale.ticks(), Major = dmm::BoardScale.major; // A tick per 1000 counts, a label every Major.
     static constexpr int HalfAngle = 46, TopMargin = 22;   // Degrees each side of vertical; arc top below the face's top.
     static constexpr int SideMargin = 18, LabelOffset = 11; // The arc's ends from the sides; numbers above the arc.
     static constexpr uint32_t FrameMs = 16;                 // At most ~60 needle redraws per second.

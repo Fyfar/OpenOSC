@@ -4,8 +4,15 @@
 
 namespace openosc::dmm {
 namespace {
-// Nominal full scales from the ZT-703S manufacturer manual, pages 32-34.
-// They describe the reported range; they are not additional calibration gains.
+// Nominal full scales from the manufacturer manuals' multimeter specifications: ZT-703S pp. 32-34
+// (25000 counts), ZT-706S pp. 32-34 (66000 counts; its 6.6000 V row belongs to AC V, the row that
+// AC V's accuracy is centred on, as DC V's). They describe the reported range; they are not
+// calibration gains. Neither manual lists a uA range, nor ranges for diode and continuity.
+struct Table { const RangeInfo *values; unsigned count; };
+template<size_t N> constexpr Table table(const RangeInfo (&values)[N]) { return {values, N}; }
+constexpr RangeInfo capacitance[] = {{"nF",3,9.999e-9},{"nF",2,99.99e-9},{"nF",1,999.9e-9}, // Both manuals.
+    {"uF",3,9.999e-6},{"uF",2,99.99e-6},{"uF",1,999.9e-6},{"mF",3,9.999e-3},{"mF",2,99.99e-3}};
+namespace zt703s {
 constexpr RangeInfo voltsDc[] = {{"V",4,2.5},{"V",3,25},{"V",2,250},{"V",1,1000}};
 constexpr RangeInfo voltsAc[] = {{"V",4,2.5},{"V",3,25},{"V",2,250},{"V",1,750}};
 constexpr RangeInfo millivolts[] = {{"mV",3,.025},{"mV",2,.25}};
@@ -13,22 +20,39 @@ constexpr RangeInfo amps[] = {{"A",4,2.5},{"A",3,10}};
 constexpr RangeInfo milliamps[] = {{"mA",3,.025},{"mA",2,.25}};
 constexpr RangeInfo resistance[] = {{"Ohm",2,250},{"kOhm",4,2500},{"kOhm",3,25000},{"kOhm",2,250000},
     {"MOhm",4,2500000},{"MOhm",3,25000000},{"MOhm",1,250000000}};
-constexpr RangeInfo capacitance[] = {{"nF",3,9.999e-9},{"nF",2,99.99e-9},{"nF",1,999.9e-9},
-    {"uF",3,9.999e-6},{"uF",2,99.99e-6},{"uF",1,999.9e-6},{"mF",3,9.999e-3},{"mF",2,99.99e-3}};
-template<size_t N> const RangeInfo *array(const RangeInfo (&values)[N], unsigned &count) { count = N; return values; }
 }
-const RangeInfo *Ranges::list(Function f, unsigned &count) {
+namespace zt706s {
+constexpr RangeInfo voltsDc[] = {{"V",4,6.6},{"V",3,66},{"V",2,660},{"V",1,1000}};
+constexpr RangeInfo voltsAc[] = {{"V",4,6.6},{"V",3,66},{"V",2,660},{"V",1,750}};
+constexpr RangeInfo millivolts[] = {{"mV",3,.066},{"mV",2,.66}};
+constexpr RangeInfo amps[] = {{"A",4,6.6},{"A",3,10}};
+constexpr RangeInfo milliamps[] = {{"mA",3,.066},{"mA",2,.66}};
+constexpr RangeInfo resistance[] = {{"Ohm",2,660},{"kOhm",4,6600},{"kOhm",3,66000},{"kOhm",2,660000},
+    {"MOhm",4,6600000},{"MOhm",3,66000000}};
+}
+struct Model { Table voltsDc, voltsAc, millivolts, amps, milliamps, resistance; };
+constexpr Model Zt703s{table(zt703s::voltsDc), table(zt703s::voltsAc), table(zt703s::millivolts),
+                       table(zt703s::amps), table(zt703s::milliamps), table(zt703s::resistance)};
+constexpr Model Zt706s{table(zt706s::voltsDc), table(zt706s::voltsAc), table(zt706s::millivolts),
+                       table(zt706s::amps), table(zt706s::milliamps), table(zt706s::resistance)};
+Table of(const Model &m, Function f) {
     switch (f) {
-    case Function::VoltageDc: return array(voltsDc, count);
-    case Function::VoltageAc: return array(voltsAc, count);
-    case Function::MillivoltsDc: case Function::MillivoltsAc: return array(millivolts, count);
-    case Function::CurrentDc: case Function::CurrentAc: return array(amps, count);
-    case Function::MilliampsDc: case Function::MilliampsAc: return array(milliamps, count);
-    case Function::Resistance: return array(resistance, count);
-    case Function::Capacitance: return array(capacitance, count);
-    default: count = 0; return nullptr;
+    case Function::VoltageDc: return m.voltsDc;
+    case Function::VoltageAc: return m.voltsAc;
+    case Function::MillivoltsDc: case Function::MillivoltsAc: return m.millivolts;
+    case Function::CurrentDc: case Function::CurrentAc: return m.amps;
+    case Function::MilliampsDc: case Function::MilliampsAc: return m.milliamps;
+    case Function::Resistance: return m.resistance;
+    case Function::Capacitance: return table(capacitance);
+    default: return {nullptr, 0};
     }
 }
+}
+const RangeInfo *Ranges::list(Function f, board::DmmCounts counts, unsigned &count) {
+    const auto t = of(counts == board::DmmCounts::Counts66000 ? Zt706s : Zt703s, f);
+    count = t.count; return t.values;
+}
+const RangeInfo *Ranges::list(Function f, unsigned &count) { return list(f, board::Current::Features.dmmCounts, count); }
 const RangeInfo *Ranges::current(const Result &result, unsigned *index) {
     unsigned count; const auto *ranges = list(Functions::identify(result), count);
     unsigned decimals = result.decimals;

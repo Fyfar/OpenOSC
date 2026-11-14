@@ -1,8 +1,10 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/recovery/fat_check.hpp"
 #include "openosc/platform/board.hpp"
 
 namespace openosc {
 void FatCheckOperation::progress(const char* phase, uint32_t done, uint32_t total) {
+    Watchdog::progress(); // Each report is a checked or repaired step.
     Board::service();
     if (done != total && Board::milliseconds() - lastDraw_ < 80) return;
     lastDraw_ = Board::milliseconds();

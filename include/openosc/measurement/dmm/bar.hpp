@@ -1,12 +1,13 @@
 #pragma once
 #include "openosc/measurement/dmm/relative.hpp"
+#include "openosc/measurement/dmm/scale.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
 namespace openosc::dmm {
 struct BarReading {
-    static constexpr int FullScale = 25000;
+    static constexpr int FullScale = BoardScale.fullScale; // The board's display maximum (scale.hpp).
     int counts = 0;
     DataStatus status = DataStatus::NoData;
     static BarReading from(const Result &result, DataStatus health,

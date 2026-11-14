@@ -11,6 +11,7 @@ struct Zt706s : Zt706sIdentity {
     static constexpr Pin ChargeStatus{Port::C, 6};
     // The generator is an external module on USART3 (PC10 TX / PC11 RX, generator::ModuleOutput); PA6
     // is the power key and PC6 the charge-status input, so neither 703S output driver runs here.
-    static constexpr Capabilities Features{GeneratorDriver::SerialModule, false, true};
+    // DMM: 66000 counts (ZT-706S manual, multimeter specifications, pp. 31-34).
+    static constexpr Capabilities Features{GeneratorDriver::SerialModule, false, true, DmmCounts::Counts66000};
 };
 } // namespace openosc::board

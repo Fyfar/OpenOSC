@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/recovery/controller.hpp"
 #include "openosc/storage/layout.hpp"
 #include <cstdio>
@@ -10,6 +11,7 @@ namespace openosc {
     else showMain();
     boot_diagnostics.stage = 4;
     while (true) {
+        Watchdog::heartbeat(); // The one proof that Recovery's loop goes on (docs/WATCHDOG.md).
         Board::service();
         usb_.state();
         usb_.hostReleased();

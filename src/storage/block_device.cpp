@@ -1,3 +1,4 @@
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/storage/block_device.hpp"
 #include "openosc/platform/board.hpp"
 #include <cstring>
@@ -56,6 +57,7 @@ bool BlockDevice::write(uint32_t lba, uint32_t count, const uint8_t* data, Media
         address += chunk;
         data += chunk;
         remaining -= chunk;
+        Watchdog::progress(); // A NOR sector rewritten: progress of whatever file operation asked for it.
         Board::service();
     }
     return true;

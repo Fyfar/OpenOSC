@@ -11,6 +11,9 @@
 namespace openosc {
 class RecoveryController {
 public:
+    // What Recovery's long operations may take in one pass (an update, a backup, a FAT check of the
+    // whole NOR); their progress reports keep the watchdog fed only within it (WatchdogPolicy).
+    static constexpr uint32_t LongOperationMs = 300000;
     RecoveryController(Display& screen, NorFlash& nor, Filesystem& fs,
                        UsbMassStorage& usb, UpdateOperation& update, FatCheckOperation& fatCheck, BlockDevice& disk, bool storageReady)
         : screen_(screen), views_(screen), nor_(nor), fs_(fs), usb_(usb),
