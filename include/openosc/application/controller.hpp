@@ -14,6 +14,8 @@
 #include "openosc/ui/editors/trigger_editor.hpp"
 #include "openosc/ui/editors/meter_properties.hpp"
 #include "openosc/ui/editors/meter_appearance_properties.hpp"
+#include "openosc/ui/editors/arrangement_properties.hpp"
+#include "openosc/ui/editors/scope_appearance_properties.hpp"
 #include "openosc/ui/editors/scope_editor.hpp"
 #include "openosc/application/readout_scheduler.hpp"
 #include "openosc/application/run_mode_switch.hpp"
@@ -158,6 +160,16 @@ private:
     void meterChanged(uint32_t now); // The DMM panel's choices, taken at once.
     ui::MeterProperties meterProperties() const;
     void meterAppearanceKeys(uint32_t keys, uint32_t now);
+    // LAYOUT (Scope, DMM digital or analog) and the Scope's COLORS: each committed choice is taken
+    // and saved at once and only restyles the screen (applyLooks); the capture, HOLD, the record,
+    // the DMM statistics and the measurement settings are untouched. Back: the parent panel.
+    void scopeLayoutKeys(uint32_t keys, uint32_t now);
+    void scopeColorsKeys(uint32_t keys, uint32_t now);
+    void meterLayoutKeys(uint32_t keys, uint32_t now);
+    template<class Block> bool layoutKeys(uint32_t keys, ui::ArrangementProperties<Block> &editor, BlockOrder<Block> &field, uint32_t now);
+    void openMeterLayout();
+    void applyLooks();  // The saved block orders and Scope colours to the view.
+    void buildView();   // The view rebuilt over the theme in force, with applyLooks.
     void refreshMeterPanel();
     void analyzeKeys(uint32_t keys, uint32_t now);
     void scopeEditorKeys(uint32_t keys, uint32_t now);
@@ -170,7 +182,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, Analyze, Channel, Acquisition, Measurements, Generator, Confirmation, Images, Zero };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, Confirmation, Images, Zero };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;
@@ -215,6 +227,10 @@ private:
     DataStatus lastSelection_ = DataStatus::NoData;
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
+    ui::ArrangementProperties<ScopeBlock> scopeLayout_;
+    ui::ArrangementProperties<DigitalBlock> digitalLayout_;
+    ui::ArrangementProperties<AnalogBlock> analogLayout_;
+    bool meterLayoutAnalog_ = false; // Which DMM order the open LAYOUT edits (the face shown when it opened).
     plot::Focus focus_ = plot::Focus::Scale;
     plot::CursorControl cursors_;
     scope::TriggerFollow triggerFollow_;
@@ -230,6 +246,8 @@ private:
     ThemeStore &themes_;
     ScreenshotWriter &shots_;
     DataAccess &data_;
+    // Over the theme in force (ThemeStore's, reloaded in place): Default shows its real colours.
+    ui::ScopeAppearanceProperties colorsEditor_{themes_.theme()};
     ApplicationState state_;
     Preferences prefs_;
     ApplicationView view_;

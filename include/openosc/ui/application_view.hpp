@@ -1,5 +1,7 @@
 #pragma once
 #include "openosc/settings/preferences.hpp"
+#include "openosc/settings/scope_appearance.hpp"
+#include "openosc/ui/components/scope_styles.hpp"
 #include "openosc/ui/scope/controls.hpp"
 #include "openosc/ui/screens/generator_screen.hpp"
 #include "openosc/ui/screens/meter_screen.hpp"
@@ -36,6 +38,21 @@ public:
     void scopeContext(unsigned channel, plot::Focus focus) { scope_.context(channel, focus); }
     void scopeGenerator(const generator::Snapshot &output) { scope_.generator(output); }
     void focusParameter(unsigned index) { host_.parameters().select(index); }
+    // Block orders (CONTRACT.md §4): only y moves, nothing is rebuilt (record, HOLD, zoom, leases,
+    // statistics stay); the same order is a no-op; an invalid order is ignored. Applied at once when
+    // that screen shows, else when it is next activated.
+    void scopeArrangement(const ScopeArrangement &order) { host_.scopeArrangement(order); }
+    void meterArrangement(const DigitalArrangement &digital, const AnalogArrangement &analog) {
+        meter_.arrangement(digital, analog, mode_ == MeasurementMode::Multimeter && !host_.overlayActive());
+    }
+    const ScopeArrangement &scopeArrangement() const { return host_.scopeArrangement(); }
+    const DigitalArrangement &digitalArrangement() const { return meter_.digitalArrangement(); }
+    const AnalogArrangement &analogArrangement() const { return meter_.analogArrangement(); }
+    const ui::ParameterBar &softKeys() { return host_.parameters(); } // Tests.
+    // The Scope's colours (CONTRACT.md §4, ScopeStyles): its effective theme from the base one, applied
+    // without rebuilding anything (record, HOLD, zoom, readouts stay). The same value is a no-op.
+    void scopeAppearance(const ScopeAppearance &appearance);
+    const ScopeAppearance &scopeAppearance() const { return scopeAppearance_; }
     void multimeter(const dmm::Result &result, bool held, DataStatus status,
                     const dmm::Statistics *statistics = nullptr) { meter_.update(result, held, status, {statistics}); }
     void multimeter(const dmm::Result &result, bool held, DataStatus status, const ui::MeterContext &context) {
@@ -86,6 +103,14 @@ private:
     ui::MenuContent menuContent_;
     bool menuRetained_ = false;
     const Theme *theme_ = nullptr;
+    ScopeAppearance scopeAppearance_;
+    ui::ScopeLook scopeLook_; // ScopeStyles::look(*theme_, scopeAppearance_).
+    Theme scopeTheme_;        // ScopeStyles::effective(*theme_, scopeLook_).
+    void applyScopeTheme(bool apply);
+    // The theme the screen in front draws with: the Scope's appearance on the Scope (its menus,
+    // popups and status shell too), the base theme on the DMM and the generator.
+    const Theme &shown() const { return mode_ == MeasurementMode::Oscilloscope ? scopeTheme_ : *theme_; }
+    void paintShell(); // The status shell, menu frame and toast in shown()'s colours.
     ui::ScreenHost host_;
     ui::BatteryIndicator battery_;
     ui::ImageBrowserView imageBrowser_;

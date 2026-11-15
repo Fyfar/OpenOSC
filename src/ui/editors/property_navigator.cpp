@@ -30,8 +30,10 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     case Mode::Number:
         if (keys & Keypad::F4) { restore(list); mode_ = Mode::Browse; return Outcome::Restored; }
         if (keys & Keypad::Menu) { mode_ = Mode::Browse; return list.edited(row_, saved_) ? Outcome::Changed : Outcome::None; }
-        if (keys & (Keypad::Right | Keypad::Up)) { list.adjust(row_, 1); return Outcome::Stepped; }
-        if (keys & (Keypad::Left | Keypad::Down)) { list.adjust(row_, -1); return Outcome::Stepped; }
+        if (keys & Keypad::Right) { list.adjust(row_, 1); return Outcome::Stepped; }
+        if (keys & Keypad::Up) { list.adjust(row_, list.coarseStep(row_)); return Outcome::Stepped; }
+        if (keys & Keypad::Left) { list.adjust(row_, -1); return Outcome::Stepped; }
+        if (keys & Keypad::Down) { list.adjust(row_, -list.coarseStep(row_)); return Outcome::Stepped; }
         return Outcome::None;
     case Mode::Browse: break;
     }

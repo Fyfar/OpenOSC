@@ -15,6 +15,9 @@ namespace openosc::ui {
 class ScopeFooter {
 public:
     void create(lv_obj_t *parent, const Theme &theme);
+    // The colours to paint with (a Scope appearance's theme, whose contents may change in place):
+    // repainted at once, the readouts, page and record state kept.
+    void theme(const Theme &theme) { theme_ = &theme; paint(); }
     void visible(bool value) { lv_obj_set_hidden(root_, !value); }
     void clear(); // No frame on display: no scales, values or state.
     void selection(const scope::ReadoutSelection &selection);
@@ -47,6 +50,8 @@ private:
     lv_obj_t *root_ = nullptr, *dots_[FooterPages::MaximumPages]{};
     FooterPanel panels_[Panels];
     const Theme *theme_ = nullptr;
+    // Neutral readout text: the Scope's readouts element colour (the appearance's Readout role).
+    uint32_t neutral() const { return theme_->elements[unsigned(MeasurementMode::Oscilloscope)][unsigned(ElementId::Measurements)].color; }
     const plot::Model *model_ = nullptr;
     scope::ReadoutSelection selection_;
     scope::ReadoutResult result_;

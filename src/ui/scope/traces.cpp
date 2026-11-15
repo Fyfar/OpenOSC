@@ -63,7 +63,7 @@ void Painter::traces() {
     if (o.persistenceMs) persistence();
     if (o.mode == Mode::XY) {
         if (!model_.xyCount()) {
-            text("XY NEEDS CH1 + CH2", 8, 18, palette_.cursor, 180);
+            text("XY NEEDS CH1 + CH2", 8, 18, palette_.readout, 180);
             return;
         }
         if (o.glow)
@@ -90,6 +90,6 @@ void Painter::traces() {
     if (model_.hasReference())
         text("REF", model_.viewport().width - 28, 3, palette_.reference, 28);
     if (o.averaging > 1)
-        text("AVG", 8, model_.viewport().height - 14, palette_.cursor, 30);
+        text("AVG", 8, model_.viewport().height - 14, palette_.readout, 30);
 }
 } // namespace openosc::plot

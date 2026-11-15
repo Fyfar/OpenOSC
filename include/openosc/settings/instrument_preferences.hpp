@@ -4,6 +4,8 @@
 #include "openosc/acquisition/readouts.hpp"
 #include "openosc/acquisition/record_depths.hpp"
 #include "openosc/settings/meter_appearance.hpp"
+#include "openosc/settings/scope_appearance.hpp"
+#include "openosc/settings/screen_arrangement.hpp"
 
 namespace openosc {
 struct ScopePreferences {
@@ -17,11 +19,15 @@ struct ScopePreferences {
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
+    // The look only (never the capture, HOLD or the measurements): the blocks' order under the
+    // status bar, and the colour scheme with its per-role overrides. Files before them: defaults.
+    ScopeArrangement arrangement;
+    ScopeAppearance appearance;
     bool valid() const;
 };
 struct MeterPreferences {
     // display: 0 primary, 1 statistics (MEAN), 2 trend, 3 analog dial (appended: 0..2 keep their meaning).
-    static constexpr uint32_t Displays = 4, Faces = 3, Palettes = 3;
+    static constexpr uint32_t Displays = 4, Faces = 3, Palettes = 3, AnalogDisplay = 3;
     uint32_t display = 0, statistics = 1, automatic = 1, range = 0;
     uint32_t face = 0, palette = 0; // ui::MeterStyles: IBM/Mono/Segment, Dark/Amber/Paper.
     // The function (MeterFunctions index) the manual `range` was confirmed in; MeterFunctionCount:
@@ -30,9 +36,14 @@ struct MeterPreferences {
     // Per-element overrides over palette and face (Measurement > Appearance); none: the base look.
     // The reading's font override, when set, is the reading's face; Default: `face`.
     MeterAppearance appearance;
+    // The blocks' order under the status bar: the digital faces (display 0..2) and the analog dial
+    // (display 3) each keep their own. Files before them: defaults (soft keys at the bottom).
+    DigitalArrangement digitalArrangement;
+    AnalogArrangement analogArrangement;
+    bool analog() const { return display == AnalogDisplay; } // Which of the two orders shows.
     bool valid() const {
         return display < Displays && statistics <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes &&
-               rangeFunction <= MeterFunctionCount && appearance.valid();
+               rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid();
     }
 };
 } // namespace openosc

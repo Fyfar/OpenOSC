@@ -57,7 +57,7 @@ void Painter::recordGapLabels(const RecordGaps &gaps) {
         for (const char *value : {full, brief}) {
             const int width = ui::Elements::textWidth(value) + 4;
             if (width > x1 - x0) continue;
-            text(value, x0 + (x1 - x0 - width) / 2, lv_area_get_height(&area_) / 2 - 6, palette_.cursor, width, true);
+            text(value, x0 + (x1 - x0 - width) / 2, lv_area_get_height(&area_) / 2 - 6, palette_.readout, width, true);
             return;
         }
     };

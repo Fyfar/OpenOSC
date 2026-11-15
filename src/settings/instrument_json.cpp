@@ -1,4 +1,6 @@
 #include "openosc/settings/instrument_json.hpp"
+#include "openosc/settings/color_value.hpp"
+#include "openosc/settings/scope_appearance_json.hpp"
 #include <cstring>
 
 namespace openosc {
@@ -29,7 +31,32 @@ constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
 static_assert(sizeof displays / sizeof *displays == MeterPreferences::Displays && sizeof faces / sizeof *faces == MeterPreferences::Faces &&
               sizeof palettes / sizeof *palettes == MeterPreferences::Palettes);
-// meter.appearance: {"<role key>": {"color": "<swatch>", "font": "<font>", "style": "<style>"}}, only the
+// A colour's file text: a named colour by its static key (not copied), Custom as "#rrggbb" (copied
+// into the document), Inherit not written.
+void color(JsonObject object, const ColorValue &value) {
+    if (value.inherit()) return;
+    if (!value.isCustom()) { object["color"] = ColorCatalog::swatch(value.index).key; return; }
+    char text[ColorText::Capacity];
+    if (ColorText::format(value, text, sizeof text)) object["color"] = static_cast<char *>(text);
+}
+// A block order: an array of its keys, top to bottom. Anything else (not an array, a wrong length,
+// an unknown or doubled key) leaves the default: a damaged order never rejects the file.
+template<class Block> void arrangement(JsonObjectConst object, const char *name, BlockOrder<Block> &output) {
+    constexpr unsigned Size = BlockOrder<Block>::Size;
+    const auto array = object[name].as<JsonArrayConst>();
+    if (array.isNull() || array.size() != Size) return;
+    const char *keys[Size];
+    for (unsigned i = 0; i < Size; ++i) {
+        if (!array[i].is<const char *>()) return;
+        keys[i] = array[i].as<const char *>();
+    }
+    BlockOrder<Block>::fromKeys(keys, Size, output);
+}
+template<class Block> void arrangement(JsonObject object, const char *name, const BlockOrder<Block> &values) {
+    auto array = object.createNestedArray(name);
+    for (unsigned slot = 0; slot < BlockOrder<Block>::Size; ++slot) array.add(BlockOrder<Block>::key(values.at(slot)));
+}
+// meter.appearance: {"<role key>": {"color": "<swatch>|#rrggbb", "font": "<font>", "style": "<style>"}}, only the
 // overrides. Each field stands alone: an unknown role, value or type is left out (inherited), never
 // the reason to drop the rest of the file (older or newer firmware wrote it).
 void appearance(JsonObjectConst object, MeterAppearance &output) {
@@ -38,7 +65,7 @@ void appearance(JsonObjectConst object, MeterAppearance &output) {
         const auto role = object[info.key];
         if (!role.is<JsonObjectConst>()) continue;
         auto &style = output.roles[i];
-        style.color = MeterAppearanceCatalog::swatchByKey(role["color"].as<const char *>());
+        style.setColor(ColorText::parse(role["color"].as<const char *>())); // A key, "#rrggbb", else Inherit.
         style.font = MeterAppearanceCatalog::find(info.fontKeys, info.fonts, role["font"].as<const char *>());
         style.style = MeterAppearanceCatalog::find(info.styleKeys, info.styles, role["style"].as<const char *>());
     }
@@ -51,7 +78,7 @@ void appearance(JsonObject meter, const MeterAppearance &values) {
         if (style == MeterRoleStyle{}) continue;
         const auto &info = MeterAppearanceCatalog::role(MeterRole(i));
         auto role = object.createNestedObject(info.key);
-        if (style.color != MeterRoleStyle::Inherit) role["color"] = MeterAppearanceCatalog::swatch(style.color).key;
+        color(role, style.colorValue());
         if (style.font != MeterRoleStyle::Inherit) role["font"] = info.fontKeys[style.font];
         if (style.style != MeterRoleStyle::Inherit) role["style"] = info.styleKeys[style.style];
     }
@@ -71,6 +98,10 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
         !choice(meter, "palette", output.meter.palette, palettes)) return false;
     if (meter["appearance"].is<JsonObjectConst>()) appearance(meter["appearance"].as<JsonObjectConst>(), output.meter.appearance);
+    arrangement(meter, "arrangement_digital", output.meter.digitalArrangement);
+    arrangement(meter, "arrangement_analog", output.meter.analogArrangement);
+    arrangement(scope, "arrangement", s.arrangement);
+    if (scope["appearance"].is<JsonObjectConst>()) ScopeAppearanceJson::parse(scope["appearance"].as<JsonObjectConst>(), s.appearance);
     if (meter.containsKey("range_function")) { // The owner of range_index; absent: unknown.
         if (!meter["range_function"].is<const char *>()) return false;
         unsigned f = 0;
@@ -145,9 +176,13 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
         for (auto value : channel) row.add(value);
     }
     scope["measure_basis"] = s.measurements.basis==scope::ReadoutBasis::Record ? "record" : "screen";
+    arrangement(scope, "arrangement", s.arrangement);
+    ScopeAppearanceJson::encode(scope, s.appearance);
     meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics);
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];
+    arrangement(meter, "arrangement_digital", values.meter.digitalArrangement);
+    arrangement(meter, "arrangement_analog", values.meter.analogArrangement);
     if (values.meter.rangeFunction < MeterFunctionCount) meter["range_function"] = MeterFunctions[values.meter.rangeFunction].key;
     appearance(meter, values.meter.appearance);
 }

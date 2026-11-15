@@ -38,9 +38,8 @@ void MeterScreen::style(unsigned face, unsigned palette, const MeterAppearance &
     auto &elements = host_.elements();
     auto *panel = host_.meterPanel();
     lv_obj_set_style_bg_color(panel, lv_color_hex(look_.color(MeterRole::Background)), 0);
-    const int top = parameters.y + parameters.height + 1;
-    lv_obj_set_pos(panel, 0, top);
-    lv_obj_set_size(panel, 320, 240 - top);
+    lv_obj_set_pos(panel, 0, ScreenLayout::Top); // The whole body: the soft keys draw their own cards over it.
+    lv_obj_set_size(panel, 320, ScreenLayout::Body);
     lv_obj_set_hidden(panel, false);
     Elements::textColor(elements.get(ElementId::Reading), look_.color(MeterRole::Reading));
     auto *unit = elements.get(ElementId::Unit);
@@ -65,11 +64,13 @@ void MeterScreen::style(unsigned face, unsigned palette, const MeterAppearance &
     if (lv_obj_get_style_text_font(line, LV_PART_MAIN) != look_.text(MeterRole::Details, details))
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details), 0);
 }
-// Digital: the reading across the width. Analog: the dial in its place and over the bar's rows (the
-// summary moves down by them), the reading small on the function row.
-// Digital: the theme's places. Analog (the user's layout 2): the function sign and a 12 px meta
-// row (range, range mode, AC frequency) at the top, the dial with RMS and the jacks as its marking,
-// MIN/MAX/AVG on one compact row, the reading at 64 px with its unit centred at the bottom (AnalogLayout).
+// Digital (ScreenLayout::digital): the reading block is the sign row (function sign, jacks, unit badge)
+// over the 64 px digits, the measurements block the summary (meta row, MIN/MAX/AVG, bar) or the
+// trend. Analog (ScreenLayout::analog): the dial block is the sign and the meta row (range, range
+// mode, AC frequency) over the 92 px dial with RMS and the jacks as its marking; the measurements
+// block MIN/MAX/AVG on one row; the reading block the 64 px digits with their unit centred. The soft
+// keys are the order's Buttons block. The theme's x, widths and fonts stay; its y inside a block
+// are taken relative to its default body top.
 void MeterScreen::layout(bool analog) {
     analog_ = analog;
     const auto *t = host_.theme().elements[Mode];
@@ -79,40 +80,55 @@ void MeterScreen::layout(bool analog) {
     auto *summary = elements.get(ElementId::Measurements), *line = elements.get(ElementId::Details);
     auto *value = elements.get(ElementId::Reading), *unitLabel = elements.get(ElementId::Unit);
     const auto place = [](lv_obj_t *object, int x, int y, int w, int h) { lv_obj_set_pos(object, x, y); lv_obj_set_size(object, w, h); };
-    host_.functionIcon().place(reading.x, unit.y);
     host_.functionIcon().visible(true);
     host_.meterSummary().bar(!analog);
     MeterReading::release(line);
     Elements::textColor(line, look_.color(MeterRole::Details));
-    using L = AnalogLayout;
     if (analog) {
-        place(summary, rows.x, L::MetaY, rows.width, L::StatsY + MeterSummary::CompactRow - L::MetaY);
-        host_.meterSummary().compact(true, L::StatsY - L::MetaY);
-        host_.dial().place(reading.x, L::DialY, reading.width, L::DialHeight);
-        // The info line's right slot (only "Waiting" before any packet; the jacks are the dial's marking).
+        ScreenLayout::analog(analogOrder_, statistics_, analogSpans_);
+        const auto &dial = analogSpans_[unsigned(AnalogBlock::Dial)], &stats = analogSpans_[unsigned(AnalogBlock::Measurements)];
+        // The summary spans the body: its meta row goes with the dial, its statistics row stands alone.
+        place(summary, rows.x, ScreenLayout::Top, rows.width, ScreenLayout::Body);
+        host_.meterSummary().compact(true, dial.y - ScreenLayout::Top, stats.shown ? stats.y - ScreenLayout::Top : -1);
+        host_.meterSummary().statisticsRows(true);
+        host_.functionIcon().place(reading.x, dial.y + 1);
+        host_.dial().place(reading.x, dial.y + ScreenLayout::DialOffset, reading.width, ScreenLayout::DialHeight);
+        // The info line's right slot in the meta row (only "Waiting" before a packet; the jacks are the dial's marking).
         const int jacks = rows.x + MeterSummary::CompactMetaX + 158;
-        place(line, jacks, L::MetaY, rows.x + rows.width - jacks, MeterSummary::CompactRow);
+        place(line, jacks, dial.y, rows.x + rows.width - jacks, MeterSummary::CompactRow);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, MeterSummary::CompactFont), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_LEFT, 0);
         lv_obj_set_hidden(value, false);
+        host_.buttons(analogSpans_[unsigned(AnalogBlock::Buttons)].y);
     } else {
-        place(summary, rows.x, rows.y, rows.width, rows.height);
-        host_.meterSummary().compact(false, 0);
-        place(line, details.x, details.y, details.width, details.height);
+        ScreenLayout::digital(digital_, statistics_, digitalSpans_);
+        const auto &body = digitalSpans_[unsigned(DigitalBlock::Reading)], &meter = digitalSpans_[unsigned(DigitalBlock::Measurements)];
+        const int dy = body.y - ThemeBodyTop;
+        host_.functionIcon().place(reading.x, unit.y + dy);
+        place(summary, rows.x, meter.y, rows.width, meter.height);
+        host_.meterSummary().compact(false);
+        host_.meterSummary().statisticsRows(statistics_);
+        place(line, details.x, details.y + dy, details.width, details.height);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details.font), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_LEFT, 0);
-        place(value, reading.x, reading.y, reading.width, reading.height);
-        place(unitLabel, unit.x, unit.y, unit.width, unit.height);
+        place(value, reading.x, reading.y + dy, reading.width, reading.height);
+        place(unitLabel, unit.x, unit.y + dy, unit.width, unit.height);
         lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_hidden(value, !reading.visible);
+        host_.buttons(digitalSpans_[unsigned(DigitalBlock::Buttons)].y);
     }
     host_.dial().visible(analog);
 }
+void MeterScreen::arrangement(const DigitalArrangement &digital, const AnalogArrangement &analog, bool shown) {
+    if (!digital.valid() || !analog.valid() || (digital == digital_ && analog == analogOrder_)) return;
+    digital_ = digital; analogOrder_ = analog;
+    if (shown) layout(analog_);
+}
 void MeterScreen::cards(dmm::Function function, bool beeper, bool currentInput, unsigned focus, const char *unit) {
-    static constexpr const char *keys[ParameterBar::Count] = {"F1", "F2", "F3", "F4"};
+    // The zones stand over F1..F4: their signs say the functions, the selected one its unit; no key names.
     auto &bar = host_.parameters();
-    for (unsigned i = 0; i < ParameterBar::Count; ++i) bar.item(i, "", i == focus ? unit : keys[i]);
+    for (unsigned i = 0; i < ParameterBar::Count; ++i) bar.item(i, "", i == focus ? unit : "");
     bar.select(focus);
     host_.meterCards().show(function, beeper, currentInput, look_.color(MeterRole::CardActive), look_.color(MeterRole::CardInactive));
     host_.meterCards().visible(true);
@@ -123,10 +139,26 @@ void MeterScreen::reading(const char *text) {
     auto &elements = host_.elements();
     auto *label = elements.get(ElementId::Reading);
     const auto fonts = MeterStyles::reading(look_.face, box.font); // The Reading override, else Digits.
-    if (!analog_) { MeterReading::show(label, text, fonts); return; }
-    using L = AnalogLayout;
-    const lv_area_t area = {box.x, L::ReadingY, box.x + box.width - 1, L::ReadingY + L::ReadingHeight - 1};
-    MeterReading::showCentred(label, elements.get(ElementId::Unit), text, fonts, area, L::UnitGap);
+    const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
+    if (!analog_) MeterReading::show(label, text, fonts);
+    else {
+        const auto &span = analogSpans_[unsigned(AnalogBlock::Reading)];
+        const lv_area_t area = {box.x, span.y, box.x + box.width - 1, span.y + span.height - 1};
+        MeterReading::showCentred(label, elements.get(ElementId::Unit), text, fonts, area, UnitGap);
+    }
+    // The 64 px digits redraw beyond their box (LVGL's extra draw margin of the face). Where that
+    // reaches the soft keys next to the reading block, the keys are redrawn whole with it: a card
+    // cut by the margin's edge would not repaint exactly as a whole redraw (its sign lines).
+    if (!changed) return;
+    static constexpr int DrawMargin = 16; // Over the faces' extra draw size at 64 px (14).
+    lv_obj_update_layout(label);
+    lv_area_t reach, keys;
+    lv_obj_get_coords(label, &reach);
+    auto *bar = elements.get(ElementId::Parameters);
+    lv_obj_get_coords(bar, &keys);
+    const bool reaches = reach.y2 + DrawMargin >= keys.y1 && reach.y1 - DrawMargin <= keys.y2 &&
+                         reach.x2 + DrawMargin >= keys.x1 && reach.x1 - DrawMargin <= keys.x2;
+    if (!lv_obj_is_hidden(bar) && reaches) lv_obj_invalidate(bar);
 }
 void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative) {
     if (analog_) {
@@ -140,6 +172,7 @@ void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::
     else host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative);
 }
 void MeterScreen::fastBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now) {
+    if (host_.overlayActive()) return; // Under a menu: neither the bar nor the needle (hidden) is fed.
     feed(result, status, relative);
     if (analog_) host_.dial().service(now);
 }
@@ -159,10 +192,23 @@ void MeterScreen::status(const dmm::Result &result, bool held, DataStatus status
 }
 void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status,
                          const MeterContext &context) {
+    // A menu over the DMM: only the state pill follows the readings. The body (its look, places,
+    // reading, cards) waits for the DMM to show again, so nothing hidden comes back over the menu
+    // and the menu's soft keys stay where it put them; the session and its statistics run on.
+    if (host_.overlayActive()) {
+        this->status(result, held, status, context.relative && context.relative->matches(result));
+        return;
+    }
     auto &elements = host_.elements();
     held_ = held;
     style(context.face, context.palette, context.appearance ? *context.appearance : MeterAppearance());
-    if ((context.display == AnalogDisplay) != analog_) layout(context.display == AnalogDisplay);
+    // The measurements block's rows: MIN/MAX/AVG when shown (Statistics On, the statistics page) or
+    // the trend; without them it shrinks (digital) or is absent (analog) and the rest closes up.
+    const bool statisticsRows = context.display == 2 || context.showStatistics || context.display == 1;
+    if ((context.display == AnalogDisplay) != analog_ || statisticsRows != statistics_) {
+        statistics_ = statisticsRows;
+        layout(context.display == AnalogDisplay);
+    }
     const bool relative = context.relative && context.relative->matches(result);
     this->status(result, held, status, relative);
     feed(result, status, context.relative);

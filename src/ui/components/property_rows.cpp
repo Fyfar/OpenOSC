@@ -17,6 +17,7 @@ void PropertyRows::draw(MenuContent &content, lv_obj_t *parent, const PropertyLi
         if (kind == PropertyKind::Toggle) row.toggle(list.option(i));
         else if (kind == PropertyKind::Number && !editing && list.range(i, minimum, maximum))
             row.slider(unsigned(list.number(i) - minimum), 0, unsigned(maximum - minimum));
+        if (uint32_t rgb; list.valueSwatch(i, rgb)) row.valueSwatch(rgb); // Colour rows only.
     }
 }
 } // namespace openosc::ui

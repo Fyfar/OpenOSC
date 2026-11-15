@@ -96,6 +96,12 @@ Captured on a ZT703S running OpenOSC.
 **Interface and files**
 
 - LVGL-based user interface (English only)
+- Rearrangeable screens: on the oscilloscope, choose the order of the waveform, the measurements
+  and the soft-keys (**Analyze → Layout**); on the multimeter, the order of the reading, the
+  statistics/bar/trend, the dial and the soft-keys (**MENU → Layout**). Soft-keys are at the
+  bottom by default, in the same order as the physical F1–F4 keys
+- Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
+  plus custom RGB colors for individual elements. Multimeter colors can be customized as well
 - BMP screenshots with a built-in viewer
 - Settings and the color theme are stored as JSON files on the external SPI Flash, not in the
   microcontroller's internal Flash. This avoids wearing out the internal Flash, which holds

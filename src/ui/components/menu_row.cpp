@@ -20,6 +20,9 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     lv_obj_set_hidden(root_,false);
     if (toggle_) lv_obj_set_hidden(toggle_,true);
     if (slider_) lv_obj_set_hidden(slider_,true);
+    nameSwatch_.hide(); valueSwatch_.hide();
+    lv_obj_set_style_pad_left(name_, 0, 0);
+    ink_=theme.foreground; height_=height; width_=width;
     lv_obj_set_pos(root_, x, y);
     lv_obj_set_size(root_, width, height);
     lv_obj_set_scrollable(root_, false);
@@ -37,6 +40,7 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     int valueWidth=0;
     if (value) for (const char *p=value; *p; ++p)
         valueWidth+=lv_font_get_glyph_width(Elements::font(14),uint8_t(*p),uint8_t(p[1]));
+    valueWidth_=valueWidth;
     lv_obj_set_grid_dsc_array(root_, valueWidth>105 ? wideColumns : columns, rows);
     if (std::strcmp(lv_label_get_text(name_),name)) lv_label_set_text(name_,name);
     lv_obj_set_height(name_, 18);
@@ -90,5 +94,17 @@ void MenuRow::slider(unsigned value, unsigned minimum, unsigned maximum) {
         lv_obj_set_style_radius(control, LV_RADIUS_CIRCLE, part);
     }
     lv_obj_set_style_pad_all(control, 3, LV_PART_KNOB);
+}
+// The row's content box is its width less 7 px of padding each side; samples sit centred in height.
+void MenuRow::nameSwatch(uint32_t rgb) {
+    if (!root_) return;
+    nameSwatch_.update(root_, 0, (height_ - ColorSwatch::Size) / 2, rgb, ink_);
+    lv_obj_set_style_pad_left(name_, ColorSwatch::Size + ColorSwatch::Gap, 0);
+}
+void MenuRow::valueSwatch(uint32_t rgb) {
+    if (!root_) return;
+    const bool slid = slider_ && !lv_obj_is_hidden(slider_);
+    const int right = slid ? 86 : lv_obj_is_hidden(value_) ? 0 : valueWidth_;
+    valueSwatch_.update(root_, width_ - 14 - right - ColorSwatch::Gap - ColorSwatch::Size, (height_ - ColorSwatch::Size) / 2, rgb, ink_);
 }
 } // namespace openosc::ui

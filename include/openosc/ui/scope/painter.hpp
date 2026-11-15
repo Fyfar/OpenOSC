@@ -3,10 +3,19 @@
 #include "openosc/ui/scope/model.hpp"
 #include "openosc/ui/scope/plot_frame.hpp"
 #include "openosc/ui/scope/record_gaps.hpp"
+#include "openosc/settings/color_value.hpp"
 
 namespace openosc::plot {
+// The plot's colours. trigger: FollowSource draws the trigger marks in the source channel's colour;
+// tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
+// contrasts with that tag (ColorContrast); readout: neutral texts on the plot (scales, record-edge
+// and spectrum labels). The Scope appearance's Trigger, TagText and Readout roles (ScopeLook).
 struct Palette {
+    static constexpr uint32_t FollowSource = 0xffffffffu, Contrast = 0xfffffffeu;
     uint32_t background = 0, grid = 0, channels[2]{}, math = 0, reference = 0xa78bfa, cursor = 0xe2e8f0;
+    uint32_t trigger = FollowSource, tagText = Contrast, readout = 0xe2e8f0;
+    uint32_t triggerColor(unsigned source) const { return trigger == FollowSource ? channels[source & 1] : trigger; }
+    uint32_t tagInk(uint32_t fill) const { return tagText == Contrast ? ColorContrast::ink(fill) : tagText; }
 };
 class Painter {
 public:

@@ -12,7 +12,7 @@ void Painter::markers() {
     if (w < 20 || h < 20)
         return;
     if (o.mode == Mode::XY) {
-        text("XY", w - 20, 3, palette_.cursor, 20);
+        text("XY", w - 20, 3, palette_.readout, 20);
         return;
     }
     const auto &traces = model_.storage().traces;
@@ -37,7 +37,7 @@ void Painter::markers() {
     const unsigned source = unsigned(model_.triggerChannel());
     if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.channels[source].visible)
         return;
-    const auto color = palette_.channels[source];
+    const auto color = palette_.triggerColor(source); // The Trigger role, else the source channel's colour.
     // Trigger level: right margin, pointing at the plot edge.
     const int right = w + 1, outer = w + PlotFrame::Right;
     const int y = model_.triggerY();
@@ -70,7 +70,7 @@ void Painter::zeroTag(unsigned c, int zero, int centre, int h) {
             if (!TagDigits::ink(c, x, y)) { ++x; continue; }
             const int start = x;
             while (x < TagDigits::Width && TagDigits::ink(c, x, y)) ++x;
-            fill({area_.x1 + x0 + start, area_.y1 + y0 + y, area_.x1 + x0 + x - 1, area_.y1 + y0 + y}, palette_.background);
+            fill({area_.x1 + x0 + start, area_.y1 + y0 + y, area_.x1 + x0 + x - 1, area_.y1 + y0 + y}, palette_.tagInk(color));
         }
     const int middle = (left + tip - 1) / 2, arrow = PlotFrame::ArrowHeight;
     if (zero < 0)

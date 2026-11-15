@@ -6,6 +6,7 @@
 
 namespace openosc {
 namespace {
+constexpr size_t DocumentBytes = JSON_OBJECT_SIZE(PreferencesJson::DocumentSlots) + PreferencesJson::StringBytes;
 constexpr const char *generatorShapes[] = {"sine",      "square",        "triangle",
                                            "half_sine", "positive_sine", "sawtooth"};
 constexpr const char *generatorLevels[] = {"dedicated","low","high","custom"};
@@ -25,7 +26,7 @@ bool section(JsonObjectConst root, const char *key) {
 bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output) {
     if (bytes > MaxBytes || !JsonInput::completeObject(input, bytes, 6))
         return false;
-    StaticJsonDocument<6144> document; // Every DMM appearance override included (pretty file up to ~3.2 KB).
+    StaticJsonDocument<DocumentBytes> document;
     if (deserializeJson(document, input, bytes, DeserializationOption::NestingLimit(6)))
         return false;
     JsonObjectConst root = document.as<JsonObjectConst>();
@@ -132,7 +133,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
 size_t PreferencesJson::encode(const Preferences &values, char *output, size_t capacity, bool pretty) {
     if (!values.valid())
         return 0;
-    StaticJsonDocument<6144> document; // Every DMM appearance override included (pretty file up to ~3.2 KB).
+    StaticJsonDocument<DocumentBytes> document;
     document["schema"] = 1;
     document["mode"] = InstrumentModeKeys[values.mode];
     document["display"]["brightness"] = values.brightness;
@@ -155,7 +156,9 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["generator"]["level"] = generatorLevels[values.generatorLevel];
     document["generator"]["minimum_code"] = values.generatorMinimumCode;
     document["generator"]["maximum_code"] = values.generatorMaximumCode;
-    if (document.overflowed() || (pretty ? measureJsonPretty(document) : measureJson(document)) >= capacity)
+    if (document.overflowed()) return 0;
+    if (pretty && measureJsonPretty(document) >= capacity) pretty = false; // Every field, compact.
+    if ((pretty ? measureJsonPretty(document) : measureJson(document)) >= capacity)
         return 0;
     return pretty ? serializeJsonPretty(document, output, capacity)
                   : serializeJson(document, output, capacity);

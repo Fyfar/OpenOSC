@@ -18,7 +18,7 @@ Theme Theme::defaults(LayoutPreset preset) {
         element(ElementId::Reading) = {25, 87, 230, 48, theme.foreground, 32, mode != 0, {}};
         element(ElementId::Unit) = {240, 102, 70, 32, theme.accent, 24, mode != 0, {}};
         element(ElementId::Icon) = {280, 8, 24, 24, theme.foreground, 12, false, {}};
-        element(ElementId::Parameters) = {8, 22, 304, 32, theme.accent, 12, false, {}};
+        element(ElementId::Parameters) = {2, 22, 316, 32, theme.accent, 12, false, {}}; // ScreenLayout: four equal 76 px zones.
         if (!mode) element(ElementId::Parameters).color = theme.channel1;
         element(ElementId::Details) = {12, 66, 296, 18, theme.foreground, 14, false, {}};
         element(ElementId::Preview) = {12, 179, 296, 52, theme.accent, 12, false, {}};

@@ -47,6 +47,12 @@ void MeterBar::palette(const MeterPalette &palette) {
     Elements::textColor(state_, overload_);
     if (repaint) { initialized_ = false; lv_obj_invalidate(bar_); } // The OL colour is in color_.
 }
+void MeterBar::top(int y) {
+    lv_obj_set_y(sign_, y);
+    lv_obj_set_y(bar_, y + 2);
+    lv_obj_set_y(state_, y + 12);
+    for (auto *tick : ticks_) lv_obj_set_y(tick, y + 12);
+}
 void MeterBar::visible(bool value) {
     for (auto *object : {bar_, state_, sign_}) lv_obj_set_hidden(object, !value);
     visible_ = value;

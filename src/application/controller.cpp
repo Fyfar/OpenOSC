@@ -49,7 +49,7 @@ namespace openosc {
     if (uiReady_) {
         if (!prefs_.useBuiltinTheme) themes_.reload();
         Watchdog::progress();
-        view_.build(themes_.theme()); view_.measurement(state_);
+        buildView(); view_.measurement(state_);
         applyBrightness();
         char result[112]; applied.text(result,sizeof result);
         if (bootStart_.notice) view_.notify(bootStart_.notice, Board::milliseconds());

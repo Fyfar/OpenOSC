@@ -8,7 +8,7 @@ namespace openosc::plot {
 void Painter::cursorLine(CursorLine name, const char *label, int x1, int y1, int x2, int y2, int tagX, int tagY, uint32_t color) {
     const bool active = model_.cursorFocus() == name;
     line(x1, y1, x2, y2, color, active ? 255 : 170, !active, active ? 2 : 1);
-    if (active) tag(label, tagX, tagY, palette_.background, color); // Plain lines carry no box: it marks the active one.
+    if (active) tag(label, tagX, tagY, palette_.tagInk(color), color); // Plain lines carry no box: it marks the active one.
     else text(label, tagX + 2, tagY, color, 12);
 }
 void Painter::cursors() {

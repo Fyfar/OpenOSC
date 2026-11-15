@@ -1,6 +1,7 @@
 #include "openosc/ui/screens/screen_host.hpp"
 #include "openosc/ui/components/meter_reading.hpp"
 #include <algorithm>
+#include <cstdio>
 
 namespace openosc::ui {
 void ScreenHost::status(const char *text, StatusTone tone) {
@@ -74,17 +75,22 @@ void ScreenHost::build(lv_obj_t *parent, const Theme &theme) {
     waveform_.clear();
 }
 void ScreenHost::activate(MeasurementMode mode) {
+    mode_ = mode; // First: theme() follows the mode.
     tone_ = StatusTone(255); // Applying the theme below resets the pill colours.
     overlay_ = false;
     meterTrend_.visible(false);
     meterSummary_.visible(mode == MeasurementMode::Multimeter); // Every preset has the same DMM body.
-    scopeFooter_.visible(mode == MeasurementMode::Oscilloscope && theme_->layout != LayoutPreset::Legacy);
+    scopeFooter_.visible(mode == MeasurementMode::Oscilloscope); // Every preset, Legacy too: six readouts.
     // The DMM shows these itself (MeterScreen); every other screen has none.
     lv_obj_set_hidden(meterPanel_, true);
     functionIcon_.visible(false);
     dial_.visible(false);
     meterCards_.visible(false);
-    elements_.apply(theme_->elements[unsigned(mode)]);
+    const auto &theme = this->theme();
+    // The body behind the blocks (the small gaps between them) in this screen's background.
+    lv_obj_set_style_bg_color(root_, lv_color_hex(theme.background), 0);
+    lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
+    elements_.apply(theme.elements[unsigned(mode)]);
     MeterReading::release(elements_.get(ElementId::Reading)); // The DMM sets its sign column again on activation.
     // Status is part of the instrument shell, never a hideable body element.
     auto *status = elements_.get(ElementId::Status);
@@ -93,9 +99,67 @@ void ScreenHost::activate(MeasurementMode mode) {
     lv_obj_set_style_text_font(status, Elements::font(12), 0);
     lv_obj_set_hidden(status, false);
     lv_obj_move_foreground(chrome_);
-    parameters_.firstWide(mode == MeasurementMode::Oscilloscope);
-    parameters_.palette(*theme_, theme_->elements[unsigned(mode)][unsigned(ElementId::Parameters)]);
+    // One soft-key bar on every screen: the theme's y (the DMM and the Scope place it by their order).
+    buttons(theme.elements[unsigned(mode)][unsigned(ElementId::Parameters)].y);
+    paintScope();
+    if (mode == MeasurementMode::Oscilloscope) placeScope();
+    parameters_.palette(theme, theme.elements[unsigned(mode)][unsigned(ElementId::Parameters)]);
     lv_obj_set_hidden(root_, false);
+}
+void ScreenHost::scopeTheme(const Theme *theme, const ScopeLook *look, bool apply) {
+    scopeTheme_ = theme; // Its contents may have changed at the same address: applied again.
+    scopeLook_ = look;
+    if (!apply) return;
+    // Shown: the shell takes the colours at once, as on activation (the elements' colours and fonts,
+    // the order's places, the waveform, footer and soft keys); the record and the texts stay.
+    if (!root_ || mode_ != MeasurementMode::Oscilloscope || overlay_) return;
+    const auto tone = tone_;
+    char text[48];
+    std::snprintf(text, sizeof text, "%s", lv_label_get_text(elements_.get(ElementId::Status)));
+    activate(mode_);
+    if (tone != StatusTone(255)) status(text, tone); // The pill as it was (activate resets its box and colours).
+}
+void ScreenHost::paintScope() {
+    const auto &t = theme();
+    lv_obj_set_style_bg_color(chrome_, lv_color_hex(t.background), 0);
+    waveform_.colors(t);
+    if (scopeLook_ && mode_ == MeasurementMode::Oscilloscope)
+        waveform_.roles(scopeLook_->color(ScopeRole::Trigger), scopeLook_->color(ScopeRole::TagText), scopeLook_->color(ScopeRole::Readout));
+    else waveform_.roles(plot::Palette::FollowSource, plot::Palette::Contrast, t.foreground);
+    scopeFooter_.theme(t);
+}
+void ScreenHost::buttons(int y) {
+    auto *bar = elements_.get(ElementId::Parameters);
+    lv_obj_set_pos(bar, ScreenLayout::ButtonsX, y);
+    lv_obj_set_size(bar, ScreenLayout::ButtonsWidth, ScreenLayout::ButtonsHeight);
+}
+void ScreenHost::scopeArrangement(const ScopeArrangement &order) {
+    if (!order.valid() || order == scopeOrder_) return;
+    scopeOrder_ = order;
+    if (root_ && mode_ == MeasurementMode::Oscilloscope && !overlay_) placeScope();
+}
+// The order's spans for the three Scope blocks. Every preset takes them: the soft keys, the six
+// readouts and the 300x156 plot are shown in Compact and Legacy too (their old top line, one-line
+// readouts and narrower plot gave way; Legacy keeps its inline plot scales). The theme's colours,
+// fonts and the waveform's x and width stay.
+void ScreenHost::placeScope() {
+    ScreenLayout::scope(scopeOrder_, true, scopeSpans_);
+    const auto *t = theme().elements[unsigned(MeasurementMode::Oscilloscope)];
+    const auto &readouts = scopeSpans_[unsigned(ScopeBlock::Measurements)], &plot = scopeSpans_[unsigned(ScopeBlock::Waveform)];
+    const auto &keys = scopeSpans_[unsigned(ScopeBlock::Buttons)];
+    auto *measurements = elements_.get(ElementId::Measurements), *waveform = elements_.get(ElementId::Waveform);
+    const auto &w = t[unsigned(ElementId::Waveform)];
+    // The readouts row is the footer's: the full 320 px of its two panels (a theme's narrower box,
+    // Legacy's x 10 / 300, would push the second channel's panel off the screen).
+    lv_obj_set_pos(measurements, 0, readouts.y);
+    lv_obj_set_size(measurements, StatusBarLayout::Width, readouts.height);
+    lv_obj_set_hidden(measurements, false);
+    lv_obj_set_pos(waveform, w.x, plot.y);
+    lv_obj_set_size(waveform, w.width, plot.height);
+    lv_obj_set_hidden(waveform, false);
+    buttons(keys.y);
+    lv_obj_set_hidden(elements_.get(ElementId::Parameters), false);
+    lv_obj_set_hidden(elements_.get(ElementId::Details), true); // Compact's scale line: the Scale and Position zones say it.
 }
 void ScreenHost::overlay(bool parameters) {
     overlay_ = true;
@@ -106,10 +170,6 @@ void ScreenHost::overlay(bool parameters) {
         const auto id = ElementId(i);
         lv_obj_set_hidden(elements_.get(id), id != ElementId::Status && !(parameters && id == ElementId::Parameters));
     }
-    if (parameters) {
-        auto *bar = elements_.get(ElementId::Parameters);
-        lv_obj_set_pos(bar, 8, 22);
-        lv_obj_set_size(bar, 304, 32);
-    }
+    if (parameters) buttons(22); // Over a menu: the same bar, at the top under the status bar.
 }
 } // namespace openosc::ui

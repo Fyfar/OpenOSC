@@ -3,6 +3,7 @@
 #include "openosc/ui/screens/instrument_screen.hpp"
 #include "openosc/ui/screens/meter_context.hpp"
 #include "openosc/ui/components/meter_style.hpp"
+#include "openosc/ui/screens/screen_layout.hpp"
 
 namespace openosc::ui {
 // The DMM screen: places the function sign, the reading or the analog dial, the summary/trend and
@@ -10,18 +11,24 @@ namespace openosc::ui {
 class MeterScreen final : public InstrumentScreen {
 public:
     static constexpr unsigned AnalogDisplay = 3; // MeterPreferences::display.
-    // The analog layout's rows (layout 2): a 12 px meta row above the dial's tick numbers, the dial
-    // with its overload peg and needle, MIN/MAX/AVG, then the 64 px reading with its unit.
-    struct AnalogLayout {
-        static constexpr int MetaY = 55, DialY = 64, DialHeight = 92, StatsY = 158, ReadingY = 177, ReadingHeight = 62, UnitGap = 8;
-        static_assert(DialY + DialHeight <= StatsY && StatsY + 14 < ReadingY && ReadingY + ReadingHeight <= 240);
-    };
+    static constexpr int UnitGap = 8; // Between the analog view's digits and their unit.
+    // The theme's default DMM body began at y 55 under its top cards: its sign row's y there is the
+    // origin its element positions are taken relative to inside the reading block.
+    static constexpr int ThemeBodyTop = 55;
     using InstrumentScreen::InstrumentScreen;
     void activate(const ApplicationState &state) override;
     void update(const dmm::Result &result, bool held, DataStatus status, const MeterContext &context);
     void status(const dmm::Result &result, bool held, DataStatus status, bool relative = false);
     // The bar and the needle, every ~8 ms: `now` is the monotonic time the needle moves by.
     void fastBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now);
+    // The block orders of the digital faces and of the analog dial (ScreenLayout): placed at once
+    // when `shown` (the DMM is the screen and no menu covers it), else on its next activation; the
+    // same orders change nothing; no element is rebuilt.
+    void arrangement(const DigitalArrangement &digital, const AnalogArrangement &analog, bool shown);
+    const DigitalArrangement &digitalArrangement() const { return digital_; }
+    const AnalogArrangement &analogArrangement() const { return analogOrder_; }
+    const BlockSpan &digitalSpan(DigitalBlock block) const { return digitalSpans_[unsigned(block)]; }
+    const BlockSpan &analogSpan(AnalogBlock block) const { return analogSpans_[unsigned(block)]; }
 
     const MeterLook &look() const { return look_; } // What is applied (tests).
 
@@ -36,5 +43,9 @@ private:
     MeterAppearance appearance_;
     MeterLook look_;
     bool analog_ = false, held_ = false, styled_ = false;
+    bool statistics_ = true; // The measurements block has its statistics' rows (or the trend).
+    DigitalArrangement digital_;
+    AnalogArrangement analogOrder_;
+    BlockSpan digitalSpans_[DigitalArrangement::Size], analogSpans_[AnalogArrangement::Size];
 };
 } // namespace openosc::ui

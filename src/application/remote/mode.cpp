@@ -32,7 +32,7 @@ bool ApplicationController::setRemote(bool enabled) {
             uiReady_ = display_.initialize();
             if (!uiReady_) return false;
             if (!prefs_.useBuiltinTheme) themes_.reload();
-            view_.build(themes_.theme());
+            buildView();
             display_.enabled(true);
         }
         remote_ = false;

@@ -33,6 +33,7 @@ void ChoicePopup::show(lv_obj_t *menu, int top, const PropertyList &list, unsign
         list.optionName(row, first + i, name, sizeof name);
         std::snprintf(shown, sizeof shown, first + i == current ? "%s <" : "%s", name); // The option in force.
         rows_[i].update(box_, 20 + int(i) * RowHeight, RowHeight - 2, shown, "", first + i == draft, theme, accent, 2, Width - 6);
+        if (uint32_t rgb; list.optionSwatch(row, first + i, rgb)) rows_[i].nameSwatch(rgb); // Colour lists only.
     }
 }
 } // namespace openosc::ui

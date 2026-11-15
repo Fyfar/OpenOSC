@@ -8,6 +8,8 @@
 #include "openosc/ui/components/function_icon.hpp"
 #include "openosc/ui/components/meter_cards.hpp"
 #include "openosc/ui/components/status_bar_layout.hpp"
+#include "openosc/ui/screens/screen_layout.hpp"
+#include "openosc/ui/components/scope_styles.hpp"
 #include "openosc/ui/waveform.hpp"
 
 namespace openosc::ui {
@@ -21,8 +23,21 @@ public:
     void clear() { if (root_) lv_obj_delete(root_); }
     void build(lv_obj_t *parent, const Theme &theme);
     void activate(MeasurementMode mode);
+    // The Scope's block order (ScreenLayout::scope): applied at once when the Scope shows, else on
+    // its next activation; the same order changes nothing. Only y and heights move: the waveform,
+    // its record and the footer are the same objects.
+    void scopeArrangement(const ScopeArrangement &order);
+    const ScopeArrangement &scopeArrangement() const { return scopeOrder_; }
+    const BlockSpan &scopeSpan(ScopeBlock block) const { return scopeSpans_[unsigned(block)]; }
+    // The soft keys at `y` (x, width and height are ScreenLayout's, the same on every screen).
+    void buttons(int y);
     void overlay(bool parameters);
-    const Theme &theme() const { return *theme_; }
+    // The theme in force: on the Scope its appearance's (scopeTheme), elsewhere the base one.
+    const Theme &theme() const { return mode_ == MeasurementMode::Oscilloscope && scopeTheme_ ? *scopeTheme_ : *theme_; }
+    // The Scope's own colours (ScopeStyles::effective of the base theme): repainted at once when the
+    // Scope shows (no object rebuilt: the waveform's record, HOLD, zoom and the readouts stay).
+    // `look`: the roles the theme has no field for (Trigger, TagText, Readout on the plot).
+    void scopeTheme(const Theme *theme, const ScopeLook *look, bool apply = true); // apply false: only kept (a build: activate() follows).
     StatusTone tone_ = StatusTone(255);
     Elements &elements() { return elements_; }
     ParameterBar &parameters() { return parameters_; }
@@ -40,10 +55,16 @@ public:
 
 private:
     void placeStatus();
+    void placeScope(); // The Scope's blocks at their spans for scopeOrder_.
+    void paintScope(); // The Scope's colours from theme(): waveform, footer, chrome.
     lv_obj_t *root_ = nullptr, *chrome_ = nullptr, *meterPanel_ = nullptr;
     int statusX_ = StatusBarLayout::StatusX, statusWidth_ = 0, statusRight_ = 0;
     bool overlay_ = false;
-    const Theme *theme_ = nullptr;
+    MeasurementMode mode_ = MeasurementMode::Oscilloscope;
+    ScopeArrangement scopeOrder_;
+    BlockSpan scopeSpans_[ScopeArrangement::Size];
+    const Theme *theme_ = nullptr, *scopeTheme_ = nullptr;
+    const ScopeLook *scopeLook_ = nullptr;
     Elements elements_;
     ParameterBar parameters_;
     WaveformWidget waveform_;

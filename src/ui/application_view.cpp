@@ -1,4 +1,5 @@
 #include "openosc/ui/application_view.hpp"
+#include "openosc/ui/components/scope_styles.hpp"
 #include <cstdio>
 #include <cstring>
 #include "openosc/ui/scope/format.hpp"
@@ -27,6 +28,7 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_style_text_color(screen, lv_color_hex(theme.foreground), 0);
     lv_obj_set_scrollable(screen, false);
     host_.build(screen, theme);
+    applyScopeTheme(false); // The next measurement() activates with it.
     menu_ = lv_obj_create(screen);
     lv_obj_remove_style_all(menu_);
     lv_obj_set_size(menu_, 304, 218);
@@ -117,7 +119,8 @@ void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const 
     std::snprintf(text, sizeof text, "%u %s", unsigned(trigger.channel) + 1, level); // The colour names the channel.
     if (!trigger_ || !edge_) return;
     if (std::strcmp(lv_label_get_text(trigger_), text)) { lv_label_set_text(trigger_, text); placeFps(); }
-    ui::Elements::textColor(trigger_, trigger.channel == scope::Channel::Ch1 ? theme_->channel1 : theme_->channel2);
+    const auto &t = shown();
+    ui::Elements::textColor(trigger_, scopeLook_.trigger(trigger.channel == scope::Channel::Ch1 ? t.channel1 : t.channel2));
     static const lv_point_precise_t rising[] = {{0, 9}, {3, 9}, {3, 1}, {7, 1}}, falling[] = {{0, 1}, {3, 1}, {3, 9}, {7, 9}};
     const auto *points = trigger.edge == scope::Edge::Rising ? rising : falling;
     if (lv_line_get_points(edge_) != points) lv_line_set_points(edge_, points, 4);
@@ -131,11 +134,40 @@ void ApplicationView::fps(bool visible, uint32_t value) {
     }
     placeFps();
 }
+void ApplicationView::scopeAppearance(const ScopeAppearance &appearance) {
+    if (!appearance.valid() || appearance == scopeAppearance_) return;
+    scopeAppearance_ = appearance;
+    if (!theme_) return;
+    applyScopeTheme(true);
+    paintShell();
+}
+void ApplicationView::paintShell() {
+    const auto &t = shown();
+    auto *screen = lv_screen_active();
+    lv_obj_set_style_bg_color(screen, lv_color_hex(t.background), 0);
+    lv_obj_set_style_text_color(screen, lv_color_hex(t.foreground), 0);
+    lv_obj_set_style_bg_color(menu_, lv_color_hex(t.background), 0);
+    lv_obj_set_style_border_color(menu_, lv_color_hex(t.grid), 0);
+    lv_obj_set_style_bg_color(toast_, lv_color_hex(t.grid), 0);
+    lv_obj_set_style_image_recolor(usbIndicator_, lv_color_hex(t.accent), 0);
+    lv_obj_set_style_image_recolor(generatorIndicator_, lv_color_hex(t.generator), 0);
+    lv_obj_set_style_line_color(edge_, lv_color_hex(t.muted), 0);
+    lv_obj_set_style_text_color(fps_, lv_color_hex(t.muted), 0);
+    overview_.palette(t);
+}
+// The Scope's theme: the base theme under the appearance's look (ScopeStyles); the host repaints the
+// Scope with it when it shows, nothing is rebuilt.
+void ApplicationView::applyScopeTheme(bool apply) {
+    scopeLook_ = ui::ScopeStyles::look(*theme_, scopeAppearance_);
+    ui::ScopeStyles::effective(*theme_, scopeLook_, scopeTheme_);
+    host_.scopeTheme(&scopeTheme_, &scopeLook_, apply);
+}
 void ApplicationView::measurement(const ApplicationState &state) {
     if (unsigned(state.mode) >= InstrumentModeCount) return;
     mode_ = state.mode;
     lv_obj_set_hidden(menu_, true);
     host_.activate(state.mode);
+    paintShell(); // The Scope's appearance or the base theme, by the screen in front.
     ui::InstrumentScreen *screens[] = {&scope_, &meter_, &generator_};
     screens[unsigned(state.mode)]->activate(state);
     refreshIndicators();

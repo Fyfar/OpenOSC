@@ -14,6 +14,8 @@ public:
                 const dmm::RelativeReading *relative = nullptr);
     void palette(const MeterPalette &palette); // Unlit segments, scale text and the OL colour.
     void visible(bool value);                   // The analog dial replaces the bar.
+    void top(int y);                            // Its rows from y (sign, segments, numbers); default Top.
+    static constexpr int Top = 63;
 private:
     static constexpr int Segments = 48, Pitch = 6, SegmentWidth = 5, Height = 9, BarX = 8;
     static constexpr int TickWidth = 16, StateX = BarX + 118, StateWidth = 52; // The state caption over the scale numbers.

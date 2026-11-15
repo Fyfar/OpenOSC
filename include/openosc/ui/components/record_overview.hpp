@@ -37,6 +37,8 @@ public:
     enum Part : unsigned { Window, Analyzed, TriggerStem, TriggerHead, Before, After, Parts };
     void clear();
     void create(lv_obj_t *parent, const Theme &theme);
+    // The colours of `theme` on the existing objects (a Scope appearance); the next update() repaints.
+    void palette(const Theme &theme);
     void update(const plot::Model &model);
     void visible(bool value) { if (root_) lv_obj_set_hidden(root_, !value); }
     const OverviewGeometry &geometry() const { return shown_; }

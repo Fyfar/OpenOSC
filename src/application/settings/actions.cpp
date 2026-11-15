@@ -40,7 +40,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         const auto applied = applyDataPreferences();
         if (prefs_.useBuiltinTheme) themes_.defaults();
         else themes_.reload();
-        view_.build(themes_.theme());
+        buildView();
         char result[112]; applied.text(result, sizeof result);
         view_.notify(result, now);
         break;
@@ -50,7 +50,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
             saves_.dropTheme();
             prefs_.useBuiltinTheme = 0;
             changed(now);
-            view_.build(themes_.theme());
+            buildView();
             const char *notice = ThemeNotice::text(themes_);
             view_.notify(notice ? notice : "Theme loaded", now);
         } else view_.notify(themes_.error(), now);
@@ -60,7 +60,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         themes_.defaults();
         prefs_.useBuiltinTheme = 1;
         changed(now);
-        view_.build(themes_.theme());
+        buildView();
         break;
     case ui::SettingsAction::Storage:
         fs_.refreshFree();

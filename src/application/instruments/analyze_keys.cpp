@@ -43,6 +43,12 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         plotControls_.options.cursors.channel = selectedChannel_;
         plotControls_.group = plot::Controls::Group::View;
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_)); return;
+    case Actions::Layout:
+        scopeLayout_ = ui::ArrangementProperties<ScopeBlock>("SCOPE LAYOUT", prefs_.scope.arrangement);
+        openPanel(Panel::ScopeLayout, scopeLayout_); return;
+    case Actions::Colors:
+        colorsEditor_ = ui::ScopeAppearanceProperties(themes_.theme(), prefs_.scope.appearance, colorsEditor_.element());
+        openPanel(Panel::ScopeColors, colorsEditor_); return;
     case Actions::Acquisition:
         acquisitionEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
         acquisitionEditor_.snapshot(view_.waveform().model().metadata());

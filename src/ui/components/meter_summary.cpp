@@ -31,18 +31,23 @@ void MeterSummary::create(lv_obj_t *parent) {
         names_[c] = label(names[c], 0, 0, ColumnWidth);
         values_[c] = label("", 0, 0, ColumnWidth);
     }
-    compact_ = false;
+    compact_ = false; statisticsRows_ = true; metaY_ = statsY_ = 0;
+    bar_.create(root_); // Before arrange(): it places the bar too.
     arrange();
-    bar_.create(root_);
     MeterLook look;
     look.palette = {0, 0xe2e8f0, 0x94a3b8, 0x38bdf8, 0x243449, 0, 0xf87171};
     for (auto &color : look.colors) color = look.palette.ink;
     look.colors[unsigned(MeterRole::StatNames)] = look.palette.muted;
     palette(look);
 }
-void MeterSummary::compact(bool on, int statsY) {
-    if (on == compact_ && statsY == statsY_) return;
-    compact_ = on; statsY_ = statsY;
+void MeterSummary::compact(bool on, int metaY, int statsY) {
+    if (on == compact_ && metaY == metaY_ && statsY == statsY_) return;
+    compact_ = on; metaY_ = metaY; statsY_ = statsY;
+    arrange();
+}
+void MeterSummary::statisticsRows(bool rows) {
+    if (rows == statisticsRows_) return;
+    statisticsRows_ = rows;
     arrange();
 }
 void MeterSummary::arrange() {
@@ -63,13 +68,14 @@ void MeterSummary::arrange() {
             place(names_[c], columnX(c), NameY, ColumnWidth, 16);
             place(values_[c], columnX(c), ValueY, ColumnWidth, ValueHeight);
         }
+        bar_.top(statisticsRows_ ? MeterBar::Top : 24); // Without the statistics' rows: right under the meta row.
     }
-    lv_obj_set_hidden(separator_, compact_);
+    lv_obj_set_hidden(separator_, compact_ || !statisticsRows_);
 }
 // The meta row at the texts' own widths: a long REL reference moves the range mode right instead of
 // running into it, and the secondary reading (AC frequency) is right-aligned in what is left.
 void MeterSummary::flowMeta() {
-    const auto place = [](lv_obj_t *object, int x, int width) { lv_obj_set_pos(object, x, 0); lv_obj_set_size(object, std::max(1, width), CompactRow); };
+    const auto place = [&](lv_obj_t *object, int x, int width) { lv_obj_set_pos(object, x, metaY_); lv_obj_set_size(object, std::max(1, width), CompactRow); };
     const int reference = textWidth(reference_), mode = CompactMetaX + reference + CompactMetaGap;
     place(reference_, CompactMetaX, reference);
     const int secondary = mode + textWidth(range_) + CompactMetaGap;

@@ -44,7 +44,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
     return ui::MeterProperties(meter.displayed(),prefs_.meter.display,prefs_.meter.statistics,
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
-        prefs_.meter.face, prefs_.meter.palette);
+        prefs_.meter.face, prefs_.meter.palette, &themes_.theme());
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -57,9 +57,13 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
     using Outcome = ui::PropertyNavigator::Outcome;
     const auto outcome = navigator_.keys(keys, meterEditor_);
     if (outcome == Outcome::Back) { closePanel(); return; }
+    if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::Layout) { openMeterLayout(); return; }
     if (outcome == Outcome::Open) { // Appearance: its own list, over the base the panel shows.
+        // The theme in force and the DMM cards' colour, as MeterScreen styles with: Default/Base show the real base.
+        const auto &theme = themes_.theme();
+        const uint32_t cards = theme.elements[unsigned(MeasurementMode::Multimeter)][unsigned(ElementId::Parameters)].color;
         appearanceEditor_ = ui::MeterAppearanceProperties(prefs_.meter.palette, prefs_.meter.face, prefs_.meter.appearance,
-                                                          appearanceEditor_.element());
+                                                          appearanceEditor_.element(), &theme, cards);
         openPanel(Panel::MeterAppearance, appearanceEditor_);
         return;
     }
@@ -79,7 +83,11 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
         openPanel(Panel::Meter, meterEditor_, ui::MeterProperties::Appearance);
         return;
     }
-    if (outcome == Outcome::Activate) appearanceEditor_.reset(appearanceEditor_.at(navigator_.row()));
+    if (outcome == Outcome::Activate) { // A reset may drop the R/G/B rows: the action keeps its selection at its new index.
+        const auto action = appearanceEditor_.at(navigator_.row());
+        appearanceEditor_.reset(action);
+        navigator_.reset(appearanceEditor_.index(action));
+    }
     if (outcome == Outcome::Changed || outcome == Outcome::Activate) {
         auto &meter = prefs_.meter;
         const bool element = appearanceEditor_.at(navigator_.row()) == Editor::Element; // Selects, sets nothing.

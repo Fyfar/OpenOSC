@@ -15,6 +15,10 @@ public:
     WaveformWidget &operator=(const WaveformWidget &) = delete;
     lv_obj_t *create(lv_obj_t *parent);
     void colors(const Theme &theme);
+    // The Scope appearance's roles the theme has no field for (plot::Palette: FollowSource and
+    // Contrast keep their automatic meaning); repaints. Never touches the record or the options.
+    void roles(uint32_t trigger, uint32_t tagText, uint32_t readout);
+    const plot::Palette &palette() const { return palette_; } // The colours in force (tests).
     void setFrame(const scope::FrameView &frame);
     bool configure(const plot::Options &options);
     const plot::Options &options() const { return model_.options(); }
@@ -39,6 +43,10 @@ public:
 
 private:
     static void draw(lv_event_t *event);
+    // LVGL's cover check: the painter fills the whole frame opaque on every draw, so an area wholly
+    // inside the object, drawn at full opacity without radius, transform or blending, needs nothing
+    // under it (its parents' backgrounds are skipped). Anything else keeps LVGL's own answer.
+    static void cover(lv_event_t *event);
     static void geometry(lv_event_t *event);
     lv_obj_t *object_ = nullptr, *note_ = nullptr;
     plot::Model model_;

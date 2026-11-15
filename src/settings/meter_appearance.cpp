@@ -3,13 +3,6 @@
 
 namespace openosc {
 namespace {
-constexpr MeterSwatch swatches[MeterAppearanceCatalog::Swatches] = {
-    {"White", "white", 0xf8fafc},   {"Silver", "silver", 0xcbd5e1}, {"Gray", "gray", 0x8b95a5},
-    {"Graphite", "graphite", 0x3a4352}, {"Black", "black", 0x000000}, {"Navy", "navy", 0x0b1220},
-    {"Amber", "amber", 0xffb238},   {"Orange", "orange", 0xff7a3d}, {"Yellow", "yellow", 0xfde047},
-    {"Red", "red", 0xf87171},       {"Green", "green", 0x4ade80},   {"Cyan", "cyan", 0x22d3ee},
-    {"Sky", "sky", 0x38bdf8},       {"Blue", "blue", 0x3b82f6},     {"Violet", "violet", 0xa78bfa},
-    {"Paper", "paper", 0xe9e3d3}};
 constexpr const char *readingFonts[] = {"IBM", "Mono", "Segment"}, *readingKeys[] = {"ibm", "mono", "segment"};
 constexpr const char *textFonts[] = {"IBM", "Mono"}, *textKeys[] = {"ibm", "mono"};
 constexpr const char *lines[] = {"Thin", "Bold"}, *lineKeys[] = {"thin", "bold"};
@@ -32,11 +25,8 @@ uint8_t MeterAppearanceCatalog::find(const char *const *keys, unsigned count, co
     for (unsigned i = 0; key && i < count; ++i) if (!std::strcmp(keys[i], key)) return uint8_t(i);
     return MeterRoleStyle::Inherit;
 }
-uint8_t MeterAppearanceCatalog::swatchByKey(const char *key) {
-    for (unsigned i = 0; key && i < Swatches; ++i) if (!std::strcmp(swatches[i].key, key)) return uint8_t(i);
-    return MeterRoleStyle::Inherit;
-}
-const MeterSwatch &MeterAppearanceCatalog::swatch(unsigned index) { return swatches[index < Swatches ? index : 0]; }
+uint8_t MeterAppearanceCatalog::swatchByKey(const char *key) { return ColorCatalog::byKey(key); }
+const MeterSwatch &MeterAppearanceCatalog::swatch(unsigned index) { return ColorCatalog::swatch(index); }
 const MeterRoleInfo &MeterAppearanceCatalog::role(MeterRole role) { return roles[unsigned(role) < MeterAppearance::Roles ? unsigned(role) : 0]; }
 bool MeterAppearance::custom() const {
     for (const auto &role : roles) if (!(role == MeterRoleStyle{})) return true;
@@ -46,7 +36,7 @@ bool MeterAppearance::valid() const {
     for (unsigned i = 0; i < Roles; ++i) {
         const auto &r = roles[i];
         const auto &info = MeterAppearanceCatalog::role(MeterRole(i));
-        if ((r.color != MeterRoleStyle::Inherit && r.color >= MeterAppearanceCatalog::Swatches) ||
+        if (!r.colorValue().valid() ||
             (r.font != MeterRoleStyle::Inherit && r.font >= info.fonts) || (r.style != MeterRoleStyle::Inherit && r.style >= info.styles))
             return false;
     }

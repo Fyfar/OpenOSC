@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <cstdint>
 #include "openosc/generator/waveform.hpp"
 
 namespace openosc::ui {
@@ -26,8 +27,15 @@ public:
     // Makes option `index` current; false when the list refuses it (notice() says why). By
     // default by stepping adjust() towards it.
     virtual bool choose(unsigned row, unsigned index);
-    // Number (and the default choose): one step up or down.
+    // Number (and the default choose): one step up or down; Up/Down step coarseStep() at a time
+    // (Left/Right always 1). Default 1: Up/Down and Left/Right alike.
     virtual void adjust(unsigned, int) {}
+    virtual int coarseStep(unsigned) const { return 1; }
+    // Colour samples (ColorSwatch): option `index` of `row` is a colour, its 0xRRGGBB (Default: the
+    // inherited colour when it is known); the row's value is a colour (a colour choice, the R/G/B
+    // numbers: the colour they make). False, the default: no sample, the row is drawn as before.
+    virtual bool optionSwatch(unsigned, unsigned, uint32_t &) const { return false; }
+    virtual bool valueSwatch(unsigned, uint32_t &) const { return false; }
     // Number: its value, and setting it back to one it had (cancel); the slider range where it has one.
     virtual int32_t number(unsigned) const { return 0; }
     virtual void setNumber(unsigned, int32_t) {}

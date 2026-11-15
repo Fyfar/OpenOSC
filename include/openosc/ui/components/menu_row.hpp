@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/ui/components/color_swatch.hpp"
 #include "openosc/ui/components/elements.hpp"
 
 namespace openosc::ui {
@@ -13,10 +14,16 @@ public:
             bool selected, const Theme &theme, uint32_t accent);
     void toggle(bool checked);
     void slider(unsigned value, unsigned minimum, unsigned maximum);
+    // A colour sample before the name (an option of a colour list) or before the value (a colour
+    // row; left of its slider when it has one), framed in the row's text colour. update() hides both.
+    void nameSwatch(uint32_t rgb);
+    void valueSwatch(uint32_t rgb);
 
 private:
     lv_obj_t *root_ = nullptr, *name_ = nullptr, *value_ = nullptr;
     lv_obj_t *toggle_ = nullptr, *slider_ = nullptr;
-    uint32_t accent_;
+    ColorSwatch nameSwatch_, valueSwatch_;
+    uint32_t accent_, ink_ = 0;
+    int height_ = 0, width_ = 0, valueWidth_ = 0;
 };
 } // namespace openosc::ui

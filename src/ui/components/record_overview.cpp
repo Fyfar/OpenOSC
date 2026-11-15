@@ -129,6 +129,19 @@ void RecordOverview::create(lv_obj_t *parent, const Theme &theme) {
     parts_[TriggerHead] = box(root_, theme.foreground);
     lv_obj_set_size(parts_[TriggerHead], 3, MapTop);
 }
+void RecordOverview::palette(const Theme &theme) {
+    if (!root_) return;
+    channels_[0] = theme.channel1; channels_[1] = theme.channel2; math_ = theme.math;
+    const auto bg = [](lv_obj_t *o, uint32_t c) { if (o) lv_obj_set_style_bg_color(o, lv_color_hex(c), 0); };
+    lv_obj_set_style_text_color(caption_, lv_color_hex(theme.muted), 0);
+    bg(map_, theme.muted);
+    bg(lv_obj_get_child(map_, 0), theme.panel); // The record body.
+    bg(parts_[Window], theme.accent);
+    bg(parts_[TriggerStem], theme.foreground);
+    bg(parts_[TriggerHead], theme.foreground);
+    for (auto *a : {parts_[Before], parts_[After]}) lv_obj_set_style_image_recolor(a, lv_color_hex(theme.accent), 0);
+    analyzedColor_ = 0; drawn_ = false; // The analysed span and the trigger's colour: on the next update.
+}
 void RecordOverview::update(const plot::Model &model) {
     if (!root_) return;
     const auto geometry = OverviewGeometry::calculate(model, Inside);

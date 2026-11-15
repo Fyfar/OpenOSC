@@ -23,11 +23,16 @@ public:
     // The analog dial shows the magnitude: no bar.
     void bar(bool shown) { bar_.visible(shown); }
     // The analog layout: the reference, range mode and secondary reading on one 14 px meta row at
-    // the summary's top (right of the function sign, CompactMetaX on), MIN/MAX/AVG on one 14 px
-    // row `statsY` lower, each name + value group centred in its third; no separator. Off: the
-    // digital arrangement above. The meta row flows by the texts' widths: the reference, the range
-    // mode CompactMetaGap after it, the secondary reading (AC frequency) right-aligned in the rest.
-    void compact(bool on, int statsY);
+    // `metaY` (right of the function sign, CompactMetaX on), MIN/MAX/AVG on one 14 px row at
+    // `statsY` (-1: no such row, it is hidden), each name + value group centred in its third; no
+    // separator; both rows independent, as the dial and the statistics may stand anywhere in the
+    // order. Off: the digital arrangement above. The meta row flows by the texts' widths: the
+    // reference, the range mode CompactMetaGap after it, the secondary reading (AC frequency)
+    // right-aligned in the rest.
+    void compact(bool on, int metaY = 0, int statsY = 0);
+    // Digital: whether MIN/MAX/AVG (or the trend) have their rows. Without them the bar moves up
+    // under the meta row (ScreenLayout::DigitalMeterNoStatistics rows in all), leaving no hole.
+    void statisticsRows(bool rows);
     static constexpr int CompactMetaX = 60, CompactRow = 14, CompactNameGap = 4, CompactMetaGap = 6;
     static constexpr unsigned CompactFont = 12;
     static constexpr int BarTop = 63, Height = 89; // The bar's rows: BarTop..Height.
@@ -50,8 +55,8 @@ private:
     void statisticText(double value, Quantity quantity, char *output, size_t capacity) const;
     static int textWidth(lv_obj_t *label); // Its text in its own font (the role's typeface).
     MeterLook look_{};
-    bool compact_ = false;
-    int statsY_ = 0;
+    bool compact_ = false, statisticsRows_ = true;
+    int metaY_ = 0, statsY_ = 0;
     lv_obj_t *root_ = nullptr, *range_ = nullptr, *secondary_ = nullptr, *separator_ = nullptr;
     lv_obj_t *names_[Columns] = {}, *values_[Columns] = {};
     MeterBar bar_;

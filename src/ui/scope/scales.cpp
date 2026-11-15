@@ -22,7 +22,7 @@ void Painter::scales() {
     if ((o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) &&
         Format::quantity(DisplayScale::secondsPerDivision(view, m), "s", value, sizeof value)) {
         std::snprintf(label, sizeof label, "%s/div", value);
-        text(label, view.width - 98, view.height - 14, palette_.cursor, 96);
+        text(label, view.width - 98, view.height - 14, palette_.readout, 96);
     }
 }
 } // namespace openosc::plot

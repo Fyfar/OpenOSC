@@ -9,12 +9,12 @@ PropertyKind MeterProperties::kind(unsigned row) const {
     switch (row) {
     case Range: case Display: case Colors: case Digits: return PropertyKind::Choice;
     case ResetStatistics: return PropertyKind::Action;
-    case Appearance: return PropertyKind::Page; // Its own list (MeterAppearanceProperties).
+    case Appearance: case Layout: return PropertyKind::Page; // Their own lists (MeterAppearanceProperties, ArrangementProperties).
     default: return PropertyKind::Toggle;
     }
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Statistics", "Relative",
+    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Relative",
                                             "Reset statistics", "CSV logging", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
@@ -70,6 +70,11 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     case SerialOutput: serial_ = index; break;
     default: return false;
     }
+    return true;
+}
+bool MeterProperties::optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const {
+    if (row != Colors || !theme_ || index >= MeterStyles::Schemes) return false;
+    rgb = MeterStyles::palette(index, *theme_).background;
     return true;
 }
 } // namespace openosc::ui

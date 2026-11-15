@@ -29,7 +29,7 @@ void Painter::draw() {
         grid();
         if (!model_.hasFrame())
             text("NO DATA", std::max<int>(2, (lv_area_get_width(&area_) - 60) / 2),
-                 lv_area_get_height(&area_) / 2 - 6, palette_.cursor);
+                 lv_area_get_height(&area_) / 2 - 6, palette_.readout);
         else if (spectrumOnly) spectrum();
         else traces();
         // The overlay's spectrum spans the whole width over its own frequency axis: the words

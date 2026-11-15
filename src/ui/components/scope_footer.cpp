@@ -12,6 +12,11 @@ constexpr uint8_t Fill = 28, Frame = 96, Tag = 140;
 uint32_t mix(uint32_t color, uint32_t background, uint8_t share) {
     return lv_color_to_u32(lv_color_mix(lv_color_hex(color), lv_color_hex(background), share)) & 0xffffff;
 }
+// A light background (luma over half): the dimmed tag would wash out to a pale tint there.
+bool light(uint32_t background) {
+    const unsigned r = background >> 16 & 0xff, g = background >> 8 & 0xff, b = background & 0xff;
+    return 299 * r + 587 * g + 114 * b > 127500;
+}
 lv_obj_t *box(lv_obj_t *parent) {
     auto *object = lv_obj_create(parent);
     lv_obj_remove_style_all(object);
@@ -161,7 +166,9 @@ void ScopeFooter::readoutPanel(unsigned c) {
         const bool counter = items[k].kind == unsigned(scope::Measurement::CounterFrequency);
         const uint32_t value = indicator_.stale && !counter ? theme_->muted : color;
         const auto &parts = placed[k].parts;
-        panels_[c].add(placed[k].x, parts.tag, mix(value, theme_->background, Tag), parts.size);
+        // A tag is its value's colour dimmed towards a dark background; on a light one it keeps the
+        // full (dark) colour, so the names stay as readable as the values.
+        panels_[c].add(placed[k].x, parts.tag, light(theme_->background) ? value : mix(value, theme_->background, Tag), parts.size);
         panels_[c].add(placed[k].x + parts.tagWidth, parts.value, value, parts.size);
     }
     // Full: the bottom rail lit as far as the pass has come (whole when done).
@@ -205,6 +212,6 @@ void ScopeFooter::spectrumPage() {
     ReadoutText::fit("Pk", spectrum.hasPeak, spectrum.peakHz, "Hz", Layout::TextWidth, text, sizeof text);
     panels_[0].add(0, text, color);
     ReadoutText::fit("", true, (model_->spectrumFrequency(1000) - model_->spectrumFrequency(0)) / 10, "Hz", Layout::TextWidth, text, sizeof text, "/div");
-    panels_[1].add(0, text, theme_->foreground);
+    panels_[1].add(0, text, neutral());
 }
 } // namespace openosc::ui

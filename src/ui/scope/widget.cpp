@@ -1,5 +1,6 @@
 #include "openosc/ui/waveform.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "src/core/lv_obj_event_private.h" // lv_cover_check_info_t: LVGL's cover-check protocol.
 #include <cstring>
 
 namespace openosc {
@@ -12,6 +13,7 @@ lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     lv_obj_set_scrollable(object_, false);
     lv_obj_set_size(object_, 320, 152);
     lv_obj_add_event_cb(object_, draw, LV_EVENT_DRAW_MAIN, this);
+    lv_obj_add_event_cb(object_, cover, LV_EVENT_COVER_CHECK, this);
     lv_obj_add_event_cb(object_, geometry, LV_EVENT_SIZE_CHANGED, this);
     lv_obj_add_event_cb(object_, geometry, LV_EVENT_DELETE, this);
     note_ = lv_label_create(object_);
@@ -32,8 +34,14 @@ void WaveformWidget::colors(const Theme &theme) {
     palette_.math = theme.math;
     palette_.reference = theme.reference;
     palette_.cursor = theme.cursor;
+    palette_.readout = theme.foreground; // Without an appearance: neutral texts in the theme's text colour.
     if (object_)
         lv_obj_invalidate(object_);
+}
+void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout) {
+    if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout) return;
+    palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout;
+    if (object_) lv_obj_invalidate(object_);
 }
 bool WaveformWidget::configure(const plot::Options &options) {
     if (!model_.configure(options))
@@ -126,6 +134,22 @@ void WaveformWidget::draw(lv_event_t *event) {
     plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_,
                   self.held_ ? self.frozenAt_ : lv_tick_get(), self.inlineScales_)
         .draw();
+}
+void WaveformWidget::cover(lv_event_t *event) {
+    auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));
+    auto *object = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
+    if (!info || !object || info->res == LV_COVER_RES_MASKED) return; // A mask found before stays.
+    lv_area_t frame;
+    lv_obj_get_coords(object, &frame);
+    const lv_area_t &a = *info->area;
+    const bool inside = a.x1 >= frame.x1 && a.y1 >= frame.y1 && a.x2 <= frame.x2 && a.y2 <= frame.y2;
+    const bool plain = lv_obj_get_style_opa(object, LV_PART_MAIN) >= LV_OPA_MAX && lv_obj_get_style_radius(object, LV_PART_MAIN) == 0 &&
+                       lv_obj_get_style_transform_width(object, LV_PART_MAIN) == 0 && lv_obj_get_style_transform_height(object, LV_PART_MAIN) == 0 &&
+                       lv_obj_get_style_transform_scale_x(object, LV_PART_MAIN) == LV_SCALE_NONE &&
+                       lv_obj_get_style_transform_scale_y(object, LV_PART_MAIN) == LV_SCALE_NONE &&
+                       lv_obj_get_style_transform_rotation(object, LV_PART_MAIN) == 0 &&
+                       lv_obj_get_style_blend_mode(object, LV_PART_MAIN) == LV_BLEND_MODE_NORMAL;
+    if (inside && plain) info->res = LV_COVER_RES_COVER; // Else LVGL's own (not covered: no background).
 }
 void WaveformWidget::geometry(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));

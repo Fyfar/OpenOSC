@@ -49,8 +49,7 @@ MeterLook MeterStyles::look(unsigned scheme, unsigned face, const MeterAppearanc
         parameters, theme.muted, theme.foreground,   // CardActive, CardInactive, CardText
         parameters};                                 // CardSelection
     for (unsigned i = 0; i < MeterAppearance::Roles; ++i) {
-        const auto color = appearance.roles[i].color;
-        look.colors[i] = color == MeterRoleStyle::Inherit ? base[i] : MeterAppearanceCatalog::swatch(color).rgb;
+        look.colors[i] = appearance.roles[i].colorValue().resolve(base[i]);
     }
     using C = MeterAppearanceCatalog;
     for (unsigned i = 0; i < MeterAppearance::Roles; ++i) {

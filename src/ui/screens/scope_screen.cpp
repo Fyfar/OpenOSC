@@ -1,4 +1,5 @@
 #include "openosc/ui/screens/scope_screen.hpp"
+#include "openosc/ui/screens/screen_layout.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/acquisition/readouts.hpp"
@@ -60,17 +61,28 @@ void ScopeScreen::cards() {
     std::snprintf(value, sizeof value, "%s %s", scale, time); // F1 is VOL/TIME, as on the factory firmware.
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
+    // F1 Scale: the value row is the shown record's V/div and s/div (what the plot is drawn at);
+    // scales asked for but not yet captured (a stopped or held record) are its title, marked in the
+    // highlight: only the scales that differ, as the first that fits the zone (12, else condensed 11):
+    // "Scale Next 2V 20us", "Next 2V 20us", or "2V 20us" (the highlight still says Next).
+    char volts[16] = "", seconds[16] = "";
     if (framed && plot::DisplayScale::nextDiffers(shown, next_, channel_)) {
         const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});
-        char volts[16], seconds[16];
-        plot::Format::quantity(scaleNext.perDivision, scaleNext.unit, volts, sizeof volts);
+        plot::Format::quantity(scaleNext.perDivision, scaleNext.unit, volts, sizeof volts, 3);
         plot::Format::quantity(next_.timebaseNs / 1e9, "s", seconds, sizeof seconds, 3);
-        std::snprintf(next, sizeof next, "Next %s %s", volts, seconds);
-    }
-    if (*next) std::snprintf(title, sizeof title, "%s", next);
-    else std::snprintf(title, sizeof title, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), probe);
-    bar.item(0, title, value);
-    std::snprintf(value, sizeof value, "CH%u", channel_ + 1);
+        char parts[40];
+        const bool voltsDiffer = std::strcmp(volts, scale) != 0, timeDiffers = std::strcmp(seconds, time) != 0;
+        std::snprintf(parts, sizeof parts, "%s%s%s", voltsDiffer || !timeDiffers ? volts : "",
+                      (voltsDiffer || !timeDiffers) && timeDiffers ? " " : "", timeDiffers ? seconds : "");
+        std::snprintf(next, sizeof next, "Next %s", parts);
+        const int room = ScreenLayout::ButtonWidth - 8;
+        const auto fits = [&](const char *text) { return Elements::textWidth(text, 12) <= room || Elements::textWidth(text, 11) <= room; };
+        std::snprintf(title, sizeof title, "Scale %s", next);
+        if (!fits(title)) std::snprintf(title, sizeof title, "%s", fits(next) ? next : parts);
+    } else std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
+    bar.item(0, title, value, *next);
+    // F2 Position: the channel it moves, with its coupling and probe.
+    std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), probe);
     bar.item(1, "Position", value);
     std::snprintf(value, sizeof value, "CH%u", unsigned(model.triggerChannel()) + 1);
     bar.item(2, "Trigger", value);
@@ -89,39 +101,21 @@ void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned sele
     widget.setFrame(frame);
     status(health, held);
 
-    if (host_.theme().layout != LayoutPreset::Legacy) {
-        host_.scopeFooter().frame(widget.model());
-        cards();
-    }
+    host_.scopeFooter().frame(widget.model()); // Every preset: the footer's six readouts (Legacy too).
+    cards();
     if (valid_ && held_ == held && channel_ == selected) return;
     valid_ = true;
     held_ = held;
     channel_ = selected;
-    if (host_.theme().layout != LayoutPreset::Legacy) host_.elements().text(ElementId::Measurements,"");
+    host_.elements().text(ElementId::Measurements,"");
 }
 void ScopeScreen::nextFooterPage() {
-    if (host_.theme().layout != LayoutPreset::Legacy && !host_.overlayActive()) host_.scopeFooter().nextPage();
+    if (!host_.overlayActive()) host_.scopeFooter().nextPage();
 }
 // Values computed beside the waveform (ReadoutScheduler): never recomputed while painting a frame.
 bool ScopeScreen::readouts(const scope::ReadoutResult &result, const ReadoutState &state) {
     if (!valid_ || host_.overlayActive()) return false;
-    if (host_.theme().layout != LayoutPreset::Legacy) {
-        host_.scopeFooter().readouts(result, state);
-        return readoutsPainted_ = true;
-    }
-    char frequency[32] = "--", amplitude[32] = "--", text[160];
-    double value;
-    const auto &values = result.values[channel_];
-    ReadoutText::Presentation shown; // The footer's reading of the same value: its mark and digit limit.
-    if (result.computed[channel_] && values.value(scope::Measurement::Frequency, value)) {
-        shown = ReadoutText::presentation(values, scope::Measurement::Frequency);
-        plot::Format::quantity(value, "Hz", frequency, sizeof frequency, shown.limit ? shown.limit : 4);
-    }
-    if (result.computed[channel_] && values.value(scope::Measurement::PeakToPeak, value))
-        plot::Format::quantity(value, "V", amplitude, sizeof amplitude);
-    std::snprintf(text, sizeof text, "CH%u %s Vpp %s  f%s %s", channel_ + 1, ReadoutText::basisName(result.basis), amplitude, shown.mark,
-                  frequency);
-    host_.elements().text(ElementId::Measurements, text);
+    host_.scopeFooter().readouts(result, state);
     return readoutsPainted_ = true;
 }
 } // namespace openosc::ui

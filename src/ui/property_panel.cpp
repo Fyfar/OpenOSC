@@ -22,25 +22,25 @@ void ApplicationView::properties(const ui::PropertyList &properties, const ui::P
     if (properties.notice()) {
         auto *notice=menuContent_.text(menu_,properties.notice(),10,29);
         lv_obj_set_size(notice,282,16);
-        lv_obj_set_style_text_color(notice,lv_color_hex(theme_->muted),0);
+        lv_obj_set_style_text_color(notice,lv_color_hex(shown().muted),0);
     }
     char page[24];
     std::snprintf(page,sizeof page,"%u/%u",navigator.row()/visible+1,(properties.count()+visible-1)/visible);
     auto *counter = menuContent_.text(menu_, page, 252, 7);
     lv_obj_set_size(counter, 40, 16);
     lv_obj_set_style_text_align(counter, LV_TEXT_ALIGN_RIGHT, 0);
-    rows.draw(menuContent_, menu_, properties, navigator, *theme_, menuAccent_);
+    rows.draw(menuContent_, menu_, properties, navigator, shown(), menuAccent_);
     if (const auto *draft=properties.preview()) {
         if (!draftPreviewObject_) draftPreviewObject_=draftPreview_.create(menu_);
         lv_obj_set_pos(draftPreviewObject_,10,130); lv_obj_set_size(draftPreviewObject_,284,36);
         lv_obj_set_hidden(draftPreviewObject_,false);
-        draftPreview_.update(*draft,theme_->generator);
+        draftPreview_.update(*draft,shown().generator);
     }
     choice(properties, navigator, 24);
 }
 void ApplicationView::choice(const ui::PropertyList &list, const ui::PropertyNavigator &navigator, int top) {
     if (navigator.mode() == ui::PropertyNavigator::Mode::Choice)
-        choicePopup_.show(menu_, top, list, navigator.row(), navigator.draft(), *theme_, menuAccent_);
+        choicePopup_.show(menu_, top, list, navigator.row(), navigator.draft(), shown(), menuAccent_);
     else choicePopup_.hide();
 }
 void ApplicationView::frequencyEditor(const ui::FrequencyEditor &editor) {
@@ -65,9 +65,9 @@ void ApplicationView::frequencyEditor(const ui::FrequencyEditor &editor) {
     lv_obj_set_size(unit, 60, 32);
     lv_obj_set_style_text_align(unit, LV_TEXT_ALIGN_RIGHT, 0);
     plot::Format::quantity(editor.step() / 1000.0, "Hz", step, sizeof step);
-    ui::MenuRow(menu_, 87, 25, "Unit", editor.unit(), false, *theme_, menuAccent_);
-    ui::MenuRow(menu_, 113, 25, "Step", step, true, *theme_, menuAccent_);
+    ui::MenuRow(menu_, 87, 25, "Unit", editor.unit(), false, shown(), menuAccent_);
+    ui::MenuRow(menu_, 113, 25, "Step", step, true, shown(), menuAccent_);
     plot::Format::quantity(editor.value() / 1000.0, "Hz", text, sizeof text);
-    ui::MenuRow(menu_, 139, 25, "Draft", text, false, *theme_, menuAccent_);
+    ui::MenuRow(menu_, 139, 25, "Draft", text, false, shown(), menuAccent_);
 }
 } // namespace openosc
