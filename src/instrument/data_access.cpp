@@ -1,6 +1,7 @@
 #include "openosc/instrument/data_access.hpp"
 #include "openosc/calibration/record.hpp"
 #include "openosc/acquisition/sample_plan.hpp"
+#include "openosc/generator/control_bits.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/interrupts.hpp"
@@ -83,7 +84,8 @@ bool DataAccess::activate(MeasurementMode view) {
     measurement_ = view;
     if (view == MeasurementMode::Multimeter) {
         dmmActivatedAtUs_ = timeUs_;
-        frontend_.multimeter();
+        meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
+        frontend_.multimeter(meterGeneratorBits_);
         if (!uart_.start()) {
             status_ = uart_.status();
             return false;

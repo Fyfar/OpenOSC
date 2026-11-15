@@ -1,12 +1,21 @@
 #include "openosc/instrument/data_access.hpp"
+#include "openosc/generator/control_bits.hpp"
 #include <utility>
 
 namespace openosc {
+void DataAccess::followMeterGenerator() {
+    if (!active_ || stopping_ || measurement_ != MeasurementMode::Multimeter) return;
+    const uint16_t bits = generator::controlBits(generator_.offConfirmed());
+    if (bits == meterGeneratorBits_) return;
+    meterGeneratorBits_ = bits;
+    frontend_.multimeter(bits);
+}
 // The streams: no FAT, no UI and no LVGL. Also run while a refresh waits on DMA2D.
 void DataAccess::serviceStreams(uint32_t now) {
     timeUs_ += uint64_t(uint32_t(now - previousTick_)) * 1000;
     previousTick_ = now;
     StorageAdmission::service(now); // A NOR SPI stop that failed is tried again: the barrier goes once it holds.
+    followMeterGenerator(); // Before the frame starts: an ON asked under the DMM has its bits first.
     generator_.service();
     followBusLoad(); // After a generator fault too: the plans follow the bus load it leaves.
     if (active_ && !stopping_ && measurement_==MeasurementMode::Oscilloscope) counters_.service(now);

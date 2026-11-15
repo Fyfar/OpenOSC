@@ -1,4 +1,7 @@
 #include "openosc/ui/scope/options.hpp"
+#include "openosc/acquisition/timebases.hpp"
+#include <algorithm>
+#include <iterator>
 
 namespace openosc::plot {
 bool Options::valid() const {
@@ -6,7 +9,9 @@ bool Options::valid() const {
         unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom ||
         zoom > 256 || pan < -1000 || pan > 1000 || triggerPosition > 1000 ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
-        !averaging || averaging > 64 || (averaging & (averaging - 1)))
+        !averaging || averaging > 64 || (averaging & (averaging - 1)) ||
+        (heldTimebaseNs && std::find(std::begin(scope::Timebases::Values), std::end(scope::Timebases::Values),
+                                     heldTimebaseNs) == std::end(scope::Timebases::Values)))
         return false;
     for (const auto &c : channels)
         if (c.positionPermille < -1000 || c.positionPermille > 2000 || c.gainPercent < 1 ||
@@ -16,14 +21,15 @@ bool Options::valid() const {
     return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
 }
 void Options::restoreHeldView(const Options &saved) {
-    zoom = saved.zoom; zoomOut = saved.zoomOut; pan = saved.pan;
+    zoom = saved.zoom; zoomOut = saved.zoomOut; pan = saved.pan; heldTimebaseNs = saved.heldTimebaseNs;
     for (unsigned c = 0; c < 2; ++c) {
         channels[c].gainPercent = saved.channels[c].gainPercent;
         channels[c].positionPermille = saved.channels[c].positionPermille;
     }
 }
 bool Options::sameTransform(const Options &b) const {
-    if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || pan != b.pan || lockTrigger != b.lockTrigger ||
+    if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || pan != b.pan || heldTimebaseNs != b.heldTimebaseNs ||
+        lockTrigger != b.lockTrigger ||
         triggerPosition != b.triggerPosition || averaging != b.averaging || math != b.math ||
         reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
         return false;

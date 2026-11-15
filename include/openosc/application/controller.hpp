@@ -137,6 +137,7 @@ private:
     void enterCursors(uint32_t now);
     void showTrigger(const scope::FrameMetadata *shown);
     void beginHeldView();
+    void followNextTimebase(); // A held record is shown at the next capture's time/div (issue #7).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);

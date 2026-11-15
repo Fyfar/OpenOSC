@@ -5,6 +5,7 @@
 #include "openosc/ui/components/meter_style.hpp"
 #include "openosc/data/decimal.hpp"
 #include "openosc/measurement/dmm/terminals.hpp"
+#include "openosc/measurement/dmm/resolution.hpp"
 #include <cstring>
 #include <initializer_list>
 
@@ -67,8 +68,8 @@ void MeterScreen::style(unsigned face, unsigned palette, const MeterAppearance &
 // Digital: the reading across the width. Analog: the dial in its place and over the bar's rows (the
 // summary moves down by them), the reading small on the function row.
 // Digital: the theme's places. Analog (the user's layout 2): the function sign and a 12 px meta
-// row (range, range mode, secondary or jacks) at the top, the dial, MIN/MAX/AVG on one compact
-// row, the reading at 64 px with its unit centred at the bottom (AnalogLayout).
+// row (range, range mode, AC frequency) at the top, the dial with RMS and the jacks as its marking,
+// MIN/MAX/AVG on one compact row, the reading at 64 px with its unit centred at the bottom (AnalogLayout).
 void MeterScreen::layout(bool analog) {
     analog_ = analog;
     const auto *t = host_.theme().elements[Mode];
@@ -88,7 +89,7 @@ void MeterScreen::layout(bool analog) {
         place(summary, rows.x, L::MetaY, rows.width, L::StatsY + MeterSummary::CompactRow - L::MetaY);
         host_.meterSummary().compact(true, L::StatsY - L::MetaY);
         host_.dial().place(reading.x, L::DialY, reading.width, L::DialHeight);
-        // The jacks in the meta row's right slot (the summary leaves it to them without a secondary).
+        // The info line's right slot (only "Waiting" before any packet; the jacks are the dial's marking).
         const int jacks = rows.x + MeterSummary::CompactMetaX + 158;
         place(line, jacks, L::MetaY, rows.x + rows.width - jacks, MeterSummary::CompactRow);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, MeterSummary::CompactFont), 0);
@@ -129,14 +130,12 @@ void MeterScreen::reading(const char *text) {
 }
 void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative) {
     if (analog_) {
-        // The scale in the reading's unit: its decimals (as the bar counts them) fix full scale.
-        unsigned decimals = result.decimals;
-        if (decimals == 255 && result.primary.valid()) {
-            const char *dot = std::strchr(result.mainText, '.');
-            decimals = dot ? unsigned(std::strlen(dot + 1)) : 0;
-        }
-        if (decimals != 255 || result.primary.valid()) host_.dial().scale(decimals, MeterText::unit(result.unit));
-        host_.dial().reading(dmm::BarReading::from(result, status, relative), held_);
+        // The scale in the reading's unit: its decimals (as the bar counts them) and its function's
+        // counts (dmm::scaleFor) fix full scale.
+        const auto bar = dmm::BarReading::from(result, status, relative);
+        if (result.decimals != 255 || result.primary.valid())
+            host_.dial().scale(result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals, MeterText::unit(result.unit), bar.scale);
+        host_.dial().reading(bar, held_);
     }
     else host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative);
 }
@@ -179,8 +178,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
         NumericValue unit;
         const double factor = UnitParser::parse("1", result.unit, unit) ? unit.si : 1;
         std::snprintf(text, sizeof text, "--");
-        const char *dot = std::strchr(result.mainText, '.');
-        const unsigned decimals = dot ? std::strlen(dot + 1) : 0;
+        const unsigned decimals = dmm::Resolution::decimals(result);
         const double value = ((mean ? statistics->average() : result.primary.si) - reference) / factor;
         if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
     }
@@ -190,9 +188,13 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     host_.functionIcon().show(function, result.kind == dmm::Kind::DiodeWithBeeper, look_.color(MeterRole::Function));
     reading(text);
     char details[64];
-    if (analog_) // The meta row's right slot: the secondary reading takes it when there is one.
-        std::snprintf(details, sizeof details, "%s%s", result.trueRms ? "RMS " : "", result.secondary.valid() ? "" : terminals);
-    else std::snprintf(details, sizeof details, "%s%s%s", mean ? "MEAN  " : "", result.trueRms ? "RMS  " : "", terminals);
+    if (!analog_) std::snprintf(details, sizeof details, "%s%s%s", mean ? "MEAN  " : "", result.trueRms ? "RMS  " : "", terminals);
+    else { // The meta row is the range's, its mode's and the AC frequency's; RMS and the jacks are the dial's marking.
+        char marking[24];
+        std::snprintf(marking, sizeof marking, "%s%s", result.trueRms ? "RMS " : "", terminals);
+        host_.dial().marking(marking);
+        details[0] = 0;
+    }
     elements.text(ElementId::Details, details);
     // The card of the recognised function's key group (the diode is F2 Ohm / C although it reads
     // volts); an unrecognised function selects none.

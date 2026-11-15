@@ -21,6 +21,13 @@ constexpr unsigned Priority = 7; // Below the capture DMA (5) and USB (4): a byt
 constexpr uint32_t Errors = USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE;
 void interrupt() {
     const uint32_t control = USART3->CR1, status = USART3->ISR;
+    // The frame's end first: TCIE was armed in an earlier interrupt (after the last TDR write), so
+    // TC set now is that frame's real end. A byte pending in the same pass is then tagged with the
+    // completed frame, as its acknowledge must be; tagged before the TC it was dropped as stale
+    // (issue #3). A byte that came during the transmission was taken by an earlier RXNE interrupt.
+    if ((control & USART_CR1_TCIE) && (status & USART_ISR_TC)) {
+        USART3->CR1 &= ~USART_CR1_TCIE; USART3->ICR = USART_ICR_TCCF; wire.epoch = wire.epoch + 1;
+    }
     if (status & USART_ISR_RXNE_RXFNE) {
         const uint8_t byte = uint8_t(USART3->RDR);
         const uint8_t next = uint8_t((wire.head + 1) % (sizeof wire.received / sizeof *wire.received));
@@ -34,10 +41,6 @@ void interrupt() {
             USART3->ICR = USART_ICR_TCCF;
             USART3->CR1 = (USART3->CR1 & ~USART_CR1_TXEIE_TXFNFIE) | USART_CR1_TCIE;
         }
-    } else if ((control & USART_CR1_TCIE) && (USART3->ISR & USART_ISR_TC)) {
-        // Armed in an earlier interrupt and read now: a TC still set from before the last TDR write
-        // in this same interrupt cannot end the frame early.
-        USART3->CR1 &= ~USART_CR1_TCIE; USART3->ICR = USART_ICR_TCCF; wire.epoch = wire.epoch + 1;
     }
 }
 } // namespace
@@ -72,6 +75,15 @@ void ModuleOutput::stop() {
     wire.data = nullptr; wire.length = 0; onWire_ = false;
     running_ = false;
 }
+bool ModuleOutput::request(bool on) {
+    if (!submit(on)) return false; // Refused: what was pending before (and its recovery) stays.
+    recovery_.reset();
+    return true;
+}
+void ModuleOutput::failed(uint32_t now) {
+    applied_ = Applied::Unknown;
+    recovery_.failed(now);
+}
 bool ModuleOutput::submit(bool on) {
     ModuleWave::Frame frame;
     if (!ModuleWave::build(settings_, on, frame) || !start()) return false;
@@ -83,31 +95,43 @@ bool ModuleOutput::configure(const Settings &settings) {
     if (!ModuleCapabilities::accepts(settings) || !ModuleWave::build(settings, true, frame)) return false;
     const auto previous = settings_;
     settings_ = settings;
-    if (requested_ && !settings_.same(previous) && !submit(true)) { settings_ = previous; return false; }
+    if (requested_ && !settings_.same(previous) && !request(true)) { settings_ = previous; return false; }
     plan_ = {}; plan_.count = uint16_t(frame.timing.count); plan_.actualHz = frame.actualHz;
     return true;
 }
 bool ModuleOutput::enable() {
-    if (requested_) return true;
-    if (!submit(true)) return false;
+    // Already on or on its way; after a failure (NO ACK, stuck UART) ON is asked again.
+    if (requested_ && (link_.busy() || applied_ == Applied::On)) return true;
+    if (!request(true)) return false;
     requested_ = true;
     return true;
 }
 void ModuleOutput::disable() {
     if (!requested_ && (applied_ == Applied::Off || link_.offQueued())) return;
-    if (submit(false)) requested_ = false;
+    // OFF is the intent even when the UART does not start: recovery sends OFF later, never ON again.
+    requested_ = false;
+    if (!request(false)) { recovery_.reset(); failed(Board::milliseconds()); }
 }
 void ModuleOutput::service() {
-    if (!running_) return;
     const uint32_t now = Board::milliseconds();
+    // The latest requested state again after a failure; a stopped UART starts anew for it.
+    if (recovery_.due(now) && !submit(requested_)) failed(now);
+    if (!running_) return;
     // Completion first: an acknowledge already received in the same pass then counts.
     if (onWire_ && wire.epoch != sentEpoch_) { sentEpoch_ = wire.epoch; onWire_ = false; wire.length = 0; link_.sent(now); }
     while (wire.tail != wire.head) {
         const Received r = wire.received[wire.tail];
         wire.tail = uint8_t((wire.tail + 1) % (sizeof wire.received / sizeof *wire.received));
-        if (r.epoch == sentEpoch_ && !onWire_ && link_.received(r.byte)) applied_ = link_.currentOff() ? Applied::Off : Applied::On;
+        if (r.epoch == sentEpoch_ && !onWire_ && link_.received(r.byte)) {
+            applied_ = link_.currentOff() ? Applied::Off : Applied::On;
+            recovery_.reset();
+        }
     }
-    if (link_.service(now) == ModuleLink::Failure::Stuck) { applied_ = Applied::Unknown; stop(); return; }
+    switch (link_.service(now)) {
+    case ModuleLink::Failure::Stuck: failed(now); stop(); return;
+    case ModuleLink::Failure::Timeout: failed(now); break;
+    case ModuleLink::Failure::None: break;
+    }
     if (link_.due() && !onWire_) {
         const auto &frame = link_.begin(now);
         applied_ = Applied::Unknown; // On its way: the module's state is not known until acknowledged.

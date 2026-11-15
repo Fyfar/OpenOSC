@@ -1,6 +1,9 @@
 #include "openosc/ui/components/meter_summary.hpp"
 #include "openosc/ui/components/meter_reading.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/ui/format/meter.hpp"
+#include <cctype>
+#include <cstring>
 #include "openosc/measurement/dmm/ranges.hpp"
 #include <algorithm>
 #include <initializer_list>
@@ -45,9 +48,7 @@ void MeterSummary::compact(bool on, int statsY) {
 void MeterSummary::arrange() {
     const auto place = [](lv_obj_t *object, int x, int y, int w, int h) { lv_obj_set_pos(object, x, y); lv_obj_set_size(object, w, h); };
     if (compact_) {
-        place(reference_, CompactMetaX, 0, 108, CompactRow);
-        place(range_, CompactMetaX + 110, 0, 48, CompactRow);
-        place(secondary_, CompactMetaX + 158, 0, Width - CompactMetaX - 158, CompactRow);
+        flowMeta();
         lv_obj_set_style_text_align(range_, LV_TEXT_ALIGN_LEFT, 0);
         lv_obj_set_style_text_align(secondary_, LV_TEXT_ALIGN_RIGHT, 0);
         for (unsigned c = 0; c < Columns; ++c) centre(c); // Placed again as the values change.
@@ -64,6 +65,32 @@ void MeterSummary::arrange() {
         }
     }
     lv_obj_set_hidden(separator_, compact_);
+}
+// The meta row at the texts' own widths: a long REL reference moves the range mode right instead of
+// running into it, and the secondary reading (AC frequency) is right-aligned in what is left.
+void MeterSummary::flowMeta() {
+    const auto place = [](lv_obj_t *object, int x, int width) { lv_obj_set_pos(object, x, 0); lv_obj_set_size(object, std::max(1, width), CompactRow); };
+    const int reference = textWidth(reference_), mode = CompactMetaX + reference + CompactMetaGap;
+    place(reference_, CompactMetaX, reference);
+    const int secondary = mode + textWidth(range_) + CompactMetaGap;
+    place(range_, mode, textWidth(range_));
+    place(secondary_, secondary, Width - secondary);
+}
+// In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label.
+void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity) const {
+    static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+    if (resolution_.valid() && resolution_.quantity() == quantity &&
+        resolution_.format(value, MeterText::unit(resolution_.unit()), output, capacity)) return;
+    char text[24];
+    const char *unit = units[unsigned(quantity)];
+    if (!plot::Format::quantity(value, unit, text, sizeof text, dmm::Resolution::MaxDigits)) { std::snprintf(output, capacity, "----"); return; }
+    // The number and its SI prefix, then the prefixed unit in its display form.
+    const size_t length = std::strlen(text), base = std::strlen(unit);
+    const size_t prefixed = length >= base + 1 && std::isalpha(uint8_t(text[length - base - 1])) ? base + 1 : base;
+    char raw[8];
+    std::snprintf(raw, sizeof raw, "%s", text + length - std::min(prefixed, length));
+    text[length - std::min(prefixed, length)] = 0;
+    std::snprintf(output, capacity, "%s%s", text, MeterText::unit(raw));
 }
 int MeterSummary::textWidth(lv_obj_t *label) {
     lv_point_t size;
@@ -98,7 +125,7 @@ void MeterSummary::palette(const MeterLook &look) {
     font(reference_, look.text(MeterRole::Range, CompactFont));
     font(secondary_, look.text(MeterRole::Secondary, CompactFont));
     font(range_, look.text(MeterRole::Mode, CompactFont));
-    if (compact_) for (unsigned c = 0; c < Columns; ++c) centre(c);
+    if (compact_) { flowMeta(); for (unsigned c = 0; c < Columns; ++c) centre(c); }
     const auto line = lv_color_hex(look.palette.line);
     if (!lv_color_eq(lv_obj_get_style_bg_color(separator_, LV_PART_MAIN), line)) lv_obj_set_style_bg_color(separator_, line, 0);
     bar_.palette(look.palette);
@@ -122,6 +149,8 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
     } else lv_label_set_text(reference_, "Range unavailable");
     lv_label_set_text(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
                               : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
+    if (compact_) flowMeta();
+    if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
     lv_obj_set_style_text_color(range_, lv_color_hex(accent), 0);
     // Statistics shown (On, not Trend): the names stay, and an empty period (after a reset, an
     // overload or no reading, or of another quantity) shows "--" as the factory's placeholders.
@@ -131,11 +160,8 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
     if (shown && !view.valid)
         for (auto &text : texts) std::snprintf(text, sizeof text, "--");
     if (view.valid) {
-        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
-        const char *unit = units[unsigned(view.quantity)];
         const double numbers[Columns] = {view.minimum, view.maximum, view.average};
-        for (unsigned c = 0; c < Columns; ++c)
-            if (!plot::Format::quantity(numbers[c], unit, texts[c], sizeof texts[c], 6)) std::snprintf(texts[c], sizeof texts[c], "----");
+        for (unsigned c = 0; c < Columns; ++c) statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c]);
     }
     // One size for the three, each in its own typeface: the largest (ValueFont, then 12; compact:
     // 12 beside the names) in which all three fit their columns, so they share a baseline.

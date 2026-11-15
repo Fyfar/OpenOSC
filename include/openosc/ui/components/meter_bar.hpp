@@ -5,8 +5,8 @@
 
 namespace openosc::ui {
 // Segmented bar in the style of a handheld DMM: zero at the left, magnitude to the right, a
-// separate polarity sign and the board's fixed scale in thousands of counts (dmm::BoardScale: 0-25 on
-// the ZT703S, 0-66 on the ZT706S). Redrawn on every packet.
+// separate polarity sign and the reading's scale in thousands of counts (dmm::scaleFor: 0-25 on the
+// ZT703S, 0-66 on the ZT706S, 0-10 for capacitance on both). Redrawn on every packet.
 class MeterBar {
 public:
     void create(lv_obj_t *parent);
@@ -19,12 +19,14 @@ private:
     static constexpr int TickWidth = 16, StateX = BarX + 118, StateWidth = 52; // The state caption over the scale numbers.
     static void draw(lv_event_t *event);
     void showTicks(); // Each number, unless the state caption (NO DATA, STALE, OL, INVALID) covers it.
-    lv_obj_t *bar_ = nullptr, *state_ = nullptr, *sign_ = nullptr, *ticks_[dmm::BoardScale.labels()]{};
+    void scale(dmm::CountScale counts); // The numbers of a scale along the bar.
+    lv_obj_t *bar_ = nullptr, *state_ = nullptr, *sign_ = nullptr, *ticks_[dmm::MaxScaleLabels]{};
+    dmm::CountScale scale_ = dmm::BoardScale;
     uint32_t off_ = 0x243449, overload_ = 0xf87171, muted_ = 0x94a3b8;
     int lit_ = 0;
     uint32_t color_ = 0;
     DataStatus status_ = DataStatus::NoData;
     bool negative_ = false, initialized_ = false, visible_ = true;
-    bool covered_[dmm::BoardScale.labels()]{}; // Numbers under the state caption.
+    bool covered_[dmm::MaxScaleLabels]{}; // Numbers under the state caption.
 };
 }

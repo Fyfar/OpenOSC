@@ -4,6 +4,10 @@
 
 namespace openosc::plot {
 struct Viewport {
+    // A held view at the next capture's time/div (Options::heldTimebaseNs) is not bounded by
+    // FrameMetadata::valid, which bounds only the record's own: its span stops here, so span * 1000
+    // (trigger position) and span * (width - 1) stay in int64. 180 MS/s at 20 s/div is below it.
+    static constexpr uint64_t MaximumHeldSpanQ16 = uint64_t(1) << 53;
     int64_t startQ16 = 0;
     uint64_t spanQ16 = 0;
     uint16_t width = 0, height = 0;

@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/generator/module_link.hpp"
+#include "openosc/generator/module_recovery.hpp"
 #include "openosc/platform/resources.hpp"
 
 namespace openosc::generator {
@@ -12,15 +13,18 @@ namespace openosc::generator {
 // as Busy, nothing stopped), then the UART stops and starts again on the new PCLK1; a frame that was
 // waiting for its acknowledge goes again whole. The output is not switched off for it.
 // enabled() is what was asked (ON/OFF); applied what the module acknowledged (unknown after reset, a
-// timeout, a stuck UART or while a frame is on its way). status(): Busy until acknowledged, Ok,
-// Timeout (no acknowledge after ModuleLink::Attempts), HardwareError (UART did not start or finish).
+// timeout, a stuck UART or while a frame is on its way): never On without the module's acknowledge.
+// status(): Busy until acknowledged, Ok, Timeout (no acknowledge after ModuleLink::Attempts),
+// HardwareError (UART did not start or finish). After a failure the latest requested state goes
+// again (ModuleRecovery: bounded rounds, a stuck UART started anew); ON or OFF asked again after a
+// failure is a new request, even with the same settings.
 class ModuleOutput {
 public:
     enum class Applied : uint8_t { Unknown, Off, On };
     explicit ModuleOutput(PeripheralResources &) {}
     ~ModuleOutput() { stop(); }
     bool configure(const Settings &settings);   // Refuses what the module cannot do (Capabilities).
-    bool enable();
+    bool enable();                              // Again after a failure: a new request.
     // OFF whenever the module may not be off: ON asked, or not acknowledged as off (the boot, after
     // a timeout or a stuck UART) - so a failed OFF is tried again; not again while one is queued.
     void disable();
@@ -32,6 +36,7 @@ public:
     bool busy() const { return link_.busy(); }
     bool loadsBus() const { return false; }
     Applied applied() const { return applied_; }
+    unsigned recoveryRounds() const { return recovery_.rounds(); }
     bool offConfirmed() const { return !busy() && applied_ == Applied::Off; }
     DataStatus status() const { return portFailed_ ? DataStatus::HardwareError : link_.status(); }
     const Settings &settings() const { return settings_; }
@@ -41,8 +46,11 @@ public:
 private:
     bool start();
     void stop();
+    bool request(bool on);                      // Submitted: a fresh recovery budget; refused: nothing changes.
     bool submit(bool on);
+    void failed(uint32_t now);
     ModuleLink link_;
+    ModuleRecovery recovery_;
     Settings settings_;
     OutputPlan plan_;
     Applied applied_ = Applied::Unknown;

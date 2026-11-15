@@ -8,12 +8,16 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
         return false;
     width = w;
     height = h;
-    const uint64_t fullSpan = m.timebaseNs
-        ? uint64_t(std::llround(m.timebaseNs/100000000.0*m.samplesPerSecond.value()*65536))
+    // A held record may be shown at the next capture's time/div (Options::heldTimebaseNs); the
+    // record's own timebase and sample rate stay what they are.
+    const uint64_t timebase = m.timebaseNs && o.heldTimebaseNs ? o.heldTimebaseNs : m.timebaseNs;
+    const uint64_t fullSpan = timebase
+        ? uint64_t(std::llround(timebase/100000000.0*m.samplesPerSecond.value()*65536))
         : uint64_t(m.samples-1)<<16;
     const uint64_t record = uint64_t(m.samples - 1) << 16;
     spanQ16 = std::max<uint64_t>(65536, fullSpan * o.zoomOut / o.zoom);
     if (o.zoomOut > 1) spanQ16 = std::min(spanQ16, record);
+    if (timebase != m.timebaseNs) spanQ16 = std::min(spanQ16, MaximumHeldSpanQ16);
     startQ16 = int64_t(m.samples - 1) * 65536 * o.pan / 1000;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     if (o.lockTrigger && m.triggered)

@@ -11,6 +11,11 @@ namespace {
 int axis(uint32_t keys, uint32_t negative, uint32_t positive) {
     return (keys & positive ? 1 : 0) - (keys & negative ? 1 : 0);
 }
+// Left/Right: the next capture's time/div, one 1-2-5 step, in RUN and HOLD alike (issue #7).
+void stepTimebase(ScopeRequest &request, uint32_t keys) {
+    if (keys & Keypad::Right) request.timebaseNs = scope::Timebases::step(request.timebaseNs, 1);
+    if (keys & Keypad::Left) request.timebaseNs = scope::Timebases::step(request.timebaseNs, -1);
+}
 }
 void ApplicationController::setScopeFocus(plot::Focus focus) {
     focus_ = focus;
@@ -49,6 +54,26 @@ void ApplicationController::beginHeldView() {
     heldView_ = view_.waveform().options();
     heldViewActive_ = true;
     heldViewRelease_ = data_.scopeHoldReleases();
+}
+// Issue #7, as on the factory firmware: the time/div is shared by HOLD and RUN. A held record is
+// shown at the next capture's time/div, whoever chose it (Left/Right, the Timebase menu, a host),
+// and RUN keeps it; the record's metadata, lease and capture are untouched. FFT keeps its own axis.
+void ApplicationController::followNextTimebase() {
+    const auto &model = view_.waveform().model();
+    const bool held = data_.scopeHeld() && model.hasFrame() && model.metadata().timebaseNs &&
+                      view_.waveform().options().mode != plot::Mode::Spectrum;
+    const uint64_t next = data_.scopeRequest().timebaseNs;
+    const uint64_t shown = held && next != model.metadata().timebaseNs ? next : 0;
+    if (view_.waveform().options().heldTimebaseNs == shown) return; // Every display pass asks: no copy.
+    auto options = view_.waveform().options();
+    if (held) { // The chosen scale replaces the zoom, here and after RUN.
+        beginHeldView();
+        options.zoom = options.zoomOut = 1;
+        heldView_.zoom = heldView_.zoomOut = 1;
+    }
+    options.heldTimebaseNs = shown;
+    view_.waveform().configure(options);
+    dataRefresh_ = true;
 }
 void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     const bool held = data_.scopeHeld();
@@ -130,32 +155,32 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         moveTrace(arrows, now, fine);
         return;
     }
-    if (data_.scopeHeld()) { // A held frame cannot be re-acquired: arrows scale its view instead.
+    if (data_.scopeHeld()) { // A held frame cannot be re-acquired: Up/Down scale its view.
         beginHeldView();
         plot::Controls controls;
         controls.options = view_.waveform().options();
         controls.channel = selectedChannel_;
         if (keys & (Keypad::Up | Keypad::Down)) controls.adjust(plot::Controls::Gain, keys & Keypad::Up ? -1 : 1); // Up widens V/div.
         auto &view = controls.options;
-        if (keys & Keypad::Right) {
-            if (view.mode != plot::Mode::Spectrum && view.zoomOut > 1) view.zoomOut /= 2;
-            else view.zoom = std::min<uint16_t>(256, view.zoom * 2);
-        }
-        if (keys & Keypad::Left) {
-            const auto &record = view_.waveform().model().metadata();
-            const double screen = record.timebaseNs / 1e8 * record.samplesPerSecond.value();
-            if (view.zoom > 1) view.zoom /= 2;
-            else if (view.mode != plot::Mode::Spectrum && view.zoomOut < 64 && screen * view.zoomOut * 2 < record.samples) view.zoomOut *= 2;
-        }
+        const bool spectrum = view.mode == plot::Mode::Spectrum;
+        if (spectrum && (keys & Keypad::Right)) view.zoom = std::min<uint16_t>(256, view.zoom * 2); // FFT: its bins.
+        if (spectrum && (keys & Keypad::Left) && view.zoom > 1) view.zoom /= 2;
         view_.waveform().configure(controls.options);
+        if (spectrum || !(keys & (Keypad::Left | Keypad::Right))) return;
+        // Left/Right stage the next capture's time/div: no capture starts, the record stays held.
+        auto request = data_.scopeRequest();
+        stepTimebase(request, keys);
+        plot::XyMode::constrain(view_.waveform().options(), request);
+        if (request.same(data_.scopeRequest())) return; // At 10 ns, 20 s or X-Y's limit.
+        if (!applyScope(request, now, ScopeApply::StageIfHeld)) { view_.notify("Finish data transfer first", now); return; }
+        followNextTimebase();
         return;
     }
     auto request = data_.scopeRequest();
     auto &range = request.frontend.range[selectedChannel_];
     if ((keys & Keypad::Up) && range < 10) ++range; // Ranges ascend with V/div; the factory's Up is range + 1.
     if ((keys & Keypad::Down) && range) --range;
-    if (keys & Keypad::Right) request.timebaseNs = scope::Timebases::step(request.timebaseNs, 1);
-    if (keys & Keypad::Left) request.timebaseNs = scope::Timebases::step(request.timebaseNs, -1);
+    stepTimebase(request, keys);
     plot::XyMode::constrain(view_.waveform().options(), request);
     if (!applyScope(request, now)) view_.notify("Finish data transfer first", now);
 }

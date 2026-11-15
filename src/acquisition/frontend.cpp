@@ -118,9 +118,9 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
     usbtrace::mark(usbtrace::Tag::FrontendEnd);
     return true;
 }
-void AnalogFrontend::multimeter() {
+void AnalogFrontend::multimeter(uint16_t generatorBits) {
     initialize();
-    ControlLatch::write(0x3200);
+    ControlLatch::write(0x3200 | generatorBits);
     GPIOE->BSRR = uint32_t(GPIO_PIN_8) << 16;
     scopeActive_ = false;
 }

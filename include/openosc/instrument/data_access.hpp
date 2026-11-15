@@ -222,6 +222,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool configureScopeCore(const ScopeRequest &request,bool force=false,bool preserveRecord=false);
     void describeChannels(scope::FrameMetadata &metadata);
     bool generatorLoadsBus() const;
+    // The DMM control word follows what the generator's output needs (generator::controlBits).
+    void followMeterGenerator();
     // The capture's share of the bus with the ZT703S DAC stream (bus_load.cpp, Q-14).
     bool dacStreamStarting() override;
     void followBusLoad();
@@ -321,6 +323,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     board::GeneratorOutput generator_;
     board::DmmSerialOutput serial_;
     bool clockSuspended_ = false, generatorRetime_ = false, serialRetime_ = false;
+    uint16_t meterGeneratorBits_ = 0; // generator::controlBits in the DMM word now.
     // busLoad_: the bus load the plans follow; busAnnounced_: a DAC stream starts right now.
     bool busLoad_ = false, busAnnounced_ = false;
     dmm::PacketFramer framer_;

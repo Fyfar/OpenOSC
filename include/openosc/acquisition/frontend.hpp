@@ -29,7 +29,7 @@ public:
     // The offset PWM comes from the calibration overlay (factory, hardware-zero profile, trial).
     explicit AnalogFrontend(const calibration::ScopeCalibration &calibration) : calibration_(calibration) {}
     bool scope(const FrontendSettings &settings,int16_t triggerLevel);
-    void multimeter();
+    void multimeter(uint16_t generatorBits = 0); // generator::controlBits kept in the DMM word.
     static bool rangeForMillivolts(uint32_t value, unsigned &index) { return VoltageRanges::index(value, index); }
     static uint32_t millivoltsForRange(unsigned index) { return VoltageRanges::millivolts(index); }
     // The next scope() rewrites the whole path and starts the settle even under the same settings:

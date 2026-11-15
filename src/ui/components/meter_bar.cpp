@@ -28,20 +28,14 @@ void MeterBar::create(lv_obj_t *parent) {
     lv_obj_set_size(bar_, Segments * Pitch - 1, Height);
     lv_obj_set_scrollable(bar_, false);
     lv_obj_add_event_cb(bar_, draw, LV_EVENT_DRAW_MAIN, this);
-    constexpr int last = dmm::BoardScale.labels() - 1; // A label every major thousand counts along the scale.
-    for (int i = 0; i <= last; ++i) {
-        char text[4]; std::snprintf(text, sizeof text, "%d", i * dmm::BoardScale.major);
-        const int tick = BarX + i * Segments / last * Pitch;
-        const int left = i == last ? tick - TickWidth : i ? tick - TickWidth / 2 : tick;
-        auto *label = ticks_[i] = Elements::label(parent, text, left, 75);
+    for (auto *&label : ticks_) {
+        label = Elements::label(parent, "", 0, 75);
         lv_obj_set_size(label, TickWidth, 13);
-        covered_[i] = left < StateX + StateWidth && left + TickWidth > StateX;
-        lv_obj_set_style_text_align(label, i == last ? LV_TEXT_ALIGN_RIGHT : i ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
     }
     state_ = Elements::label(parent, "NO DATA", StateX, 75);
     lv_obj_set_size(state_, StateWidth, 13);
     visible_ = true; status_ = DataStatus::NoData;
-    showTicks();
+    scale(dmm::BoardScale);
     lv_obj_set_style_text_align(state_, LV_TEXT_ALIGN_CENTER, 0);
     palette({0, 0, muted_, 0, off_, 0, overload_});
 }
@@ -58,9 +52,27 @@ void MeterBar::visible(bool value) {
     visible_ = value;
     showTicks();
 }
+// A label every major thousand counts along the bar, the first left-aligned at zero, the last
+// right-aligned at full scale; labels a smaller scale does not use stay hidden.
+void MeterBar::scale(dmm::CountScale counts) {
+    scale_ = counts;
+    const int last = counts.labels() - 1;
+    for (int i = 0; i <= last; ++i) {
+        char text[4]; std::snprintf(text, sizeof text, "%d", i * counts.major);
+        const int tick = BarX + i * Segments / last * Pitch;
+        const int left = i == last ? tick - TickWidth : i ? tick - TickWidth / 2 : tick;
+        auto *label = ticks_[i];
+        lv_label_set_text(label, text);
+        lv_obj_set_x(label, left);
+        covered_[i] = left < StateX + StateWidth && left + TickWidth > StateX;
+        lv_obj_set_style_text_align(label, i == last ? LV_TEXT_ALIGN_RIGHT : i ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+    }
+    showTicks();
+}
 void MeterBar::showTicks() {
     const bool caption = status_ != DataStatus::Ok;
-    for (int i = 0; i < dmm::BoardScale.labels(); ++i) lv_obj_set_hidden(ticks_[i], !visible_ || (caption && covered_[i]));
+    for (int i = 0; i < dmm::MaxScaleLabels; ++i)
+        lv_obj_set_hidden(ticks_[i], !visible_ || i >= scale_.labels() || (caption && covered_[i]));
 }
 void MeterBar::update(const dmm::Result &result, DataStatus health, uint32_t accent,
                       const dmm::RelativeReading *relative) {
@@ -68,7 +80,9 @@ void MeterBar::update(const dmm::Result &result, DataStatus health, uint32_t acc
     const bool over = value.status == DataStatus::Overload;
     const auto color = over ? overload_ : value.status == DataStatus::Ok ? accent : 0x64748b;
     const int magnitude = std::abs(value.counts);
-    const int lit = over ? Segments : std::min(Segments, (magnitude * Segments + dmm::BarReading::FullScale - 1) / dmm::BarReading::FullScale);
+    const int full = value.scale.fullScale;
+    const int lit = over ? Segments : std::min(Segments, (magnitude * Segments + full - 1) / full);
+    if (value.scale != scale_) scale(value.scale);
     const bool negative = value.counts < 0;
     if (initialized_ && lit == lit_ && negative == negative_ && status_ == value.status && color_ == color) return;
     const bool repaint = !initialized_ || lit != lit_ || color_ != color;
