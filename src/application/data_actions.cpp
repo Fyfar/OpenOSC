@@ -23,7 +23,7 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     result.meterRequested = data_.measurementMode() == MeasurementMode::Multimeter;
     if (result.meterRequested) {
         result.meter = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
-        meterRestore_ = result.meter;
+        meterRestore_.arm(result.meter);
     }
     if (result.scope) InstrumentState::capture(data_.scopeRequest(), prefs_);
     // What the capture runs (the saved values when they were applied).
@@ -46,8 +46,9 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     panel_ = Panel::None;
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(now);
     if (state_.mode == MeasurementMode::Multimeter) {
-        meterRestore_ = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
-        if (!meterRestore_ && uiReady_) view_.notify("DMM function selection failed",now);
+        const bool requested = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
+        meterRestore_.arm(requested);
+        if (!requested && uiReady_) view_.notify("DMM function selection failed",now);
     }
     dataRefresh_=true;
     prefs_.mode = uint32_t(state_.mode);

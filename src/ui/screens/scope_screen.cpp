@@ -112,11 +112,15 @@ bool ScopeScreen::readouts(const scope::ReadoutResult &result, const ReadoutStat
     char frequency[32] = "--", amplitude[32] = "--", text[160];
     double value;
     const auto &values = result.values[channel_];
-    if (result.computed[channel_] && values.value(scope::Measurement::Frequency, value))
-        plot::Format::quantity(value, "Hz", frequency, sizeof frequency);
+    ReadoutText::Presentation shown; // The footer's reading of the same value: its mark and digit limit.
+    if (result.computed[channel_] && values.value(scope::Measurement::Frequency, value)) {
+        shown = ReadoutText::presentation(values, scope::Measurement::Frequency);
+        plot::Format::quantity(value, "Hz", frequency, sizeof frequency, shown.limit ? shown.limit : 4);
+    }
     if (result.computed[channel_] && values.value(scope::Measurement::PeakToPeak, value))
         plot::Format::quantity(value, "V", amplitude, sizeof amplitude);
-    std::snprintf(text, sizeof text, "CH%u %s Vpp %s  f %s", channel_ + 1, ReadoutText::basisName(result.basis), amplitude, frequency);
+    std::snprintf(text, sizeof text, "CH%u %s Vpp %s  f%s %s", channel_ + 1, ReadoutText::basisName(result.basis), amplitude, shown.mark,
+                  frequency);
     host_.elements().text(ElementId::Measurements, text);
     return readoutsPainted_ = true;
 }

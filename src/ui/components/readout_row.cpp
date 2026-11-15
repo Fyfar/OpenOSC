@@ -5,10 +5,12 @@
 
 namespace openosc::ui {
 namespace {
-// The first form at or after `from` the value has, narrower than `than` (any, for than < 0).
+// The first form at or after `from` the value has, narrower than `than` (any, for than < 0), within
+// the item's digit limit.
 bool narrower(const ReadoutRow::Item &item, unsigned from, int than, unsigned size, unsigned &index, ReadoutParts &parts) {
     for (unsigned i = from; i < ReadoutText::Forms; ++i)
-        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size) && (than < 0 || parts.width() < than)) {
+        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size, item.limit) &&
+            (than < 0 || parts.width() < than)) {
             index = i;
             return true;
         }

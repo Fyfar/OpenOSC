@@ -20,6 +20,25 @@ ScreenReadouts::Resolution ScreenReadouts::resolution(const ScreenSeries &series
             return {false, false};
     return {true, !(n && 2 * series.spans[c][n - 1] > span)};
 }
+// Edges from the series are crossings between two of its samples, interpolated: each is off by at
+// most half a sample with a sharp edge (one sample per column, the column's first point), however
+// the edges fall on the columns - a signal locked to the column rate repeats the same error in every
+// period, so averaging proves nothing. The frequency spans `frequencySpan` samples between its first
+// and last rising crossing: at most one sample of it is wrong. A duty cycle's high time has two
+// crossings: up to one sample of a period of P = rate / f samples, 100 / P percent.
+void ScreenReadouts::bound(scope::Measurements &values, double samplesPerSecond) {
+    using scope::Measurement;
+    double hertz = 0;
+    if (!values.value(Measurement::Frequency, hertz) || values.frequencySource() != scope::FrequencySource::Edges ||
+        !(hertz > 0) || !(samplesPerSecond > 0))
+        return;
+    const double span = values.frequencySpan();
+    if (span > 1) {
+        values.bound(Measurement::Frequency, hertz / (span - 1));
+        values.bound(Measurement::Period, 1 / (hertz * (span - 1)));
+    }
+    values.bound(Measurement::Duty, 100 * hertz / samplesPerSecond);
+}
 scope::ReadoutResult ScreenReadouts::calculate(const ScreenSeries &series, const scope::FrameMetadata &metadata,
                                                const scope::ReadoutSelection &selection, uint32_t now) {
     scope::ReadoutResult result;
@@ -46,6 +65,7 @@ scope::ReadoutResult ScreenReadouts::calculate(const ScreenSeries &series, const
         summary.hasRobust = series.band[c].valid;
         summary.robustMinimum = series.band[c].low; summary.robustMaximum = series.band[c].high;
         result.values[c] = scope::Measurements::calculate(summary, metadata.channels[c]);
+        bound(result.values[c], series.samplesPerSecond);
         result.computed[c] = true;
     }
     result.valid = true;

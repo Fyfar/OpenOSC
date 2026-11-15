@@ -97,8 +97,9 @@ void Watchdog::expect(uint32_t ms) {
     record(ResetRecord::Cause::InitFailure, 0, error);
     while (true) __NOP();
 }
-[[noreturn]] void Watchdog::park() {
-    while (true) { IWDG1->KR = KeyRefresh; refreshWindow(); __WFI(); }
+void Watchdog::terminalFeed() {
+    IWDG1->KR = KeyRefresh;
+    refreshWindow();
 }
 uint32_t Watchdog::status() { return status_; }
 const WatchdogPolicy &Watchdog::policy() { return policy_; }

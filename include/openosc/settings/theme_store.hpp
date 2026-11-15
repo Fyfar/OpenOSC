@@ -11,13 +11,15 @@ public:
     void defaults() { theme_ = Theme::defaults(); }
     const Theme& theme() const { return theme_; }
     const char* error() const { return error_; }
-    bool repaired() const { return repaired_; }
+    bool repaired() const { return repaired_; } // An invalid theme file was archived.
+    bool restored() const { return restored_; } // The theme came from theme.previous.json.
 private:
     enum class ResourceState { Valid, Invalid, StorageError };
     ResourceState resources(const Theme& theme);
     Filesystem& fs_;
     Theme theme_ = Theme::defaults();
     const char* error_ = nullptr;
-    bool repaired_ = false;
+    bool repaired_ = false, restored_ = false;
+    bool write(const Theme& theme); // theme.json through JsonFiles::write.
 };
 }

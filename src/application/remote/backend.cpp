@@ -92,9 +92,9 @@ const dmm::Result &InstrumentBackend::meter() const {
     return reading_;
 }
 DataStatus InstrumentBackend::meterStatus() const { return application_.data_.meter().status(application_.data_.nowUs(),2000000); }
-bool InstrumentBackend::selectFunction(dmm::Function f) { return application_.data_.selectDmmFunction(f); }
-bool InstrumentBackend::setAuto(bool value) { return application_.data_.setDmmAuto(value); }
-bool InstrumentBackend::setRange(unsigned index) { return application_.data_.setDmmRange(index); }
+bool InstrumentBackend::selectFunction(dmm::Function f) { return application_.meterCommand(application_.data_.selectDmmFunction(f)); }
+bool InstrumentBackend::setAuto(bool value) { return application_.meterCommand(application_.data_.setDmmAuto(value)); }
+bool InstrumentBackend::setRange(unsigned index) { return application_.meterCommand(application_.data_.setDmmRange(index)); }
 bool InstrumentBackend::holdMeter(bool held) { return application_.data_.holdMeter(held); }
 bool InstrumentBackend::relativeMeter(bool enabled) { return application_.data_.relativeMeter(enabled); }
 dmm::StatisticsView InstrumentBackend::meterStatistics() const {
@@ -107,13 +107,18 @@ MeasurementMode InstrumentBackend::screen() const { return application_.state_.m
 bool InstrumentBackend::screen(MeasurementMode mode) {
     return application_.selectMode(mode, Board::milliseconds()) == ApplicationController::ModeChange::Selected;
 }
-bool InstrumentBackend::busy() const { return application_.data_.dmmBusy() || application_.data_.zeroBusy() || application_.autoBusy(); }
+// The DMM entry's restore counts while it is owed (meterRestorePending): *OPC? does not report
+// complete between the function's confirmation and the range command it still triggers.
+bool InstrumentBackend::busy() const {
+    return application_.data_.dmmBusy() || application_.meterRestorePending() || application_.data_.zeroBusy() || application_.autoBusy();
+}
 uint32_t InstrumentBackend::operationTimeoutMs() const {
     if (application_.autoBusy()) return 602000;
     if (application_.data_.zeroBusy())
         // The procedure's own deadline, then the restore (12 s) and a new capture of the original sweep.
         return application_.data_.zeroOperation().calibration().durationMs()+14000+
                uint32_t(application_.data_.zeroOperation().calibration().original().timebaseNs/100000);
+    if (application_.meterRestorePending()) return MeterRestore::ChainMs + 2000; // Selection + restore, and a packet.
     return 10000;
 }
 DataStatus InstrumentBackend::operationStatus() const { return application_.data_.dmmCommandStatus(); }
@@ -167,5 +172,6 @@ bool InstrumentBackend::performance(PerformanceSnapshot &p) const {
         a.display_.flushes(),a.performance_.elapsed(),a.performance_.ui()};
     return true;
 }
+bool InstrumentBackend::memory(MemorySnapshot &m) const { return application_.uiReady_ && GuiHeap::read(m); }
 const char *InstrumentBackend::version() const { return OPENOSC_VERSION; }
 } // namespace openosc

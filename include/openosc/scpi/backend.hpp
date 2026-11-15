@@ -6,6 +6,7 @@
 #include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/measurement/dmm/session.hpp"
 #include "openosc/instrument/mode.hpp"
+#include "openosc/data/memory.hpp"
 #include "openosc/data/performance.hpp"
 
 namespace openosc::scpi {
@@ -56,6 +57,8 @@ public:
     virtual bool remote() const = 0;
     virtual bool remote(bool enabled) = 0;
     virtual bool performance(PerformanceSnapshot &) const { return false; }
+    // The GUI heap, read now (a pool walk); false while there is none to read.
+    virtual bool memory(MemorySnapshot &) const { return false; }
     virtual bool recovery() { return false; }
     // Run mode as the core clock in MHz (0: no profile runs, the HSI fallback). The setter changes
     // it in place, as the Settings menu does, and returns 0 or the SCPI error to report.

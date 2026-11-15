@@ -6,7 +6,7 @@ void ApplicationController::restoreSettings(uint32_t now) {
     Preferences defaults;
     defaults.useBuiltinTheme=1; // Preserve the user's theme file; use the built-in layout after restart.
     if (!preferences_.save(defaults)) { view_.notify(preferences_.error(),now); return; }
-    prefs_=defaults; savePending_=themePending_=false;
+    prefs_=defaults; saves_.dropSettings(); saves_.dropTheme();
     confirmAction_=ShutdownAction::Restart;
     requestShutdown(now);
 }

@@ -23,7 +23,7 @@ namespace openosc {
     prefs_ = preferences_.values();
     applyPreferences();
     battery_.initialize();
-    data_.initialize(state_.mode);
+    const bool backend = data_.initialize(state_.mode);
     const auto applied = applyDataPreferences();
     InstrumentBackend tmcBackend(*this), serialBackend(*this);
     scpi::Engine tmcEngine(tmcBackend), serialEngine(serialBackend);
@@ -52,12 +52,13 @@ namespace openosc {
         view_.build(themes_.theme()); view_.measurement(state_);
         applyBrightness();
         char result[112]; applied.text(result,sizeof result);
-        if (!applied.ok()) view_.notify(result,Board::milliseconds());
+        if (bootStart_.notice) view_.notify(bootStart_.notice, Board::milliseconds());
+        else if (!applied.ok()) view_.notify(result,Board::milliseconds());
         else if (preferences_.error()) view_.notify(preferences_.error(), Board::milliseconds());
         else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; previous copy restored", Board::milliseconds());
         else if (preferences_.repaired()) view_.notify("Bad settings archived; defaults written", Board::milliseconds());
         else if (preferences_.restored()) view_.notify("Settings restored from previous copy", Board::milliseconds());
-        else if (themes_.repaired()) view_.notify("Bad theme archived; defaults restored", Board::milliseconds());
+        else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(theme, Board::milliseconds());
         else if (themes_.error()) view_.notify(themes_.error(), Board::milliseconds());
         else if (data_.zeroFile().error()) view_.notify(data_.zeroFile().error(),Board::milliseconds());
         else if (data_.zeroFile().repaired()) view_.notify("Bad zero JSON preserved; profile restored",Board::milliseconds());
@@ -65,9 +66,19 @@ namespace openosc {
     } else { // Headless: no UI; Remote (and its 200 MHz) only if that profile really runs.
         boot_diagnostics.error = 2; display_.enabled(false); setRemote(true);
     }
+    // While a host enumerates the capture keeps quiet (usb::QuietAttach); DataAccess answers for it.
+    struct CaptureQuiet final : usb::QuietClient {
+        DataAccess &data;
+        explicit CaptureQuiet(DataAccess &d) : data(d) {}
+        bool quietCapture(bool quiet) override { return data.quietCapture(quiet); }
+    } captureQuiet(data_);
+    usb.quietWith(&captureQuiet); // Before any attach, the boot start's first.
     usb.followClock(ClockControl::activeMode()); // The boot profile: a high one leaves USB data off.
-    if (usb.allowed() && !usb.start()) boot_diagnostics.error = 3;
+    if (usb.allowed() && !usb.start()) boot_diagnostics.error = 3; // Accepted and waiting counts as started.
     boot_diagnostics.stage = 11;
+    // A headless start or one whose backend did not come up never confirms the 360 MHz profile.
+    started_ = uiReady_ && backend && applied.ok();
+    if (bootStart_.armed) guardConfirmation_.armed(Board::milliseconds());
     performance_.start(DWT->CYCCNT);
     InputService::enable();
     while (true) {
@@ -77,6 +88,7 @@ namespace openosc {
         const uint32_t now = Board::milliseconds();
         data_.poll(now);
         serviceShutdown(now);
+        serviceBootGuard(now);
         usb.poll(now);
 #ifdef OPENOSC_DIAG_MAILBOX
         local.poll(now);
@@ -229,27 +241,52 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     } else if (state_.settingsOpen) settingsKeys(keys, now);
     else panelKeys(keys, now, !(events.repeat & (Keypad::Up|Keypad::Down|Keypad::Left|Keypad::Right)));
 }
-void ApplicationController::changed(uint32_t now) { savePending_ = true; saveAt_ = now + 1000; }
-void ApplicationController::store(uint32_t now) {
-    // Erasing the external Flash dips the supply shared with the USB PHY hard enough
-    // to drop the host, so saves wait until no host is present (STORE-02).
-    // Shutdown and the Recovery handoff still flush them.
-    if (usb_ && usb_->hostActive(now)) return;
-    if (themePending_ && int32_t(now - themeAt_) >= 0) {
-        if (themes_.savePlot(view_.waveform().options())) themePending_ = false;
-        else { themeAt_=now+5000; if (uiReady_) view_.notify(themes_.error(),now); }
-    }
-    if (!savePending_ || int32_t(now - saveAt_) < 0) return;
+void ApplicationController::changed(uint32_t now) { saves_.settingsChanged(now); }
+// The guarded profile confirmed after its stable time (BootConfirmation); no NOR write while a host is
+// active (STORE-02) or a shutdown or the Recovery handoff runs.
+void ApplicationController::serviceBootGuard(uint32_t now) {
+    // Also not while HOLD waits for its record (scopeHoldPending): the confirmation is not consumed, the next pass writes it.
+    if (!guard_ || shutdownSequence_.active() || recoveryPending_ || (usb_ && usb_->hostActive(now)) || data_.scopeHoldPending()) return;
+    if (!guardConfirmation_.due(now, ClockControl::activeMode() == OverclockedRunMode, started_)) return;
+    guardConfirmation_.written(guard_->confirm(), now);
+    Watchdog::progress();
+}
+// One attempt, never a reason to stay on (Q-01): a failed write leaves "starting", the conservative side.
+void ApplicationController::stopBootGuard() {
+    if (!guard_ || !guardConfirmation_.waiting()) return;
+    guardStopped_ = guard_->stop();
+    Watchdog::progress();
+    guardConfirmation_.cancel();
+}
+
+// Each save, failed or not, is a finished step (WatchdogPolicy): two saves in one pass may each end
+// only after a NOR timeout (5 s), longer together than the watchdog allows without progress.
+bool ApplicationController::SettingsStore::saveTheme() {
+    const bool saved = a_.themes_.savePlot(a_.view_.waveform().options());
+    Watchdog::progress();
+    return saved;
+}
+bool ApplicationController::SettingsStore::savePreferences() {
     usbtrace::mark(usbtrace::Tag::SaveBegin);
-    const bool saved = preferences_.save(prefs_);
+    const bool saved = a_.preferences_.save(a_.prefs_);
     usbtrace::mark(usbtrace::Tag::SaveEnd);
-    if (saved) savePending_=false;
-    else { saveAt_=now+5000; if (uiReady_) view_.notify(preferences_.error(),now); }
-    if (uiReady_ && state_.settingsOpen && !settingsMenu_.information()) showSettings();
+    Watchdog::progress();
+    return saved;
+}
+// Erasing the external Flash dips the supply shared with the USB PHY hard enough to drop the host, so
+// saves wait until no host is present (STORE-02). A running shutdown or Recovery handoff saves once
+// itself (ShutdownSequence), so the background save stays out of its way (PendingSaves).
+void ApplicationController::store(uint32_t now) {
+    SettingsStore files(*this);
+    const uint32_t outcome = saves_.service(now, shutdownSequence_, recoveryPending_, usb_ && usb_->hostActive(now),
+                                            data_.scopeHoldPending(), files);
+    if (!uiReady_) return;
+    if (outcome & PendingSaves::ThemeFailed) view_.notify(themes_.error(), now);
+    if (outcome & PendingSaves::SettingsFailed) view_.notify(preferences_.error(), now);
+    if ((outcome & PendingSaves::SettingsAttempted) && state_.settingsOpen && !settingsMenu_.information()) showSettings();
 }
 void ApplicationController::queuePlotSave(uint32_t now) {
-    themePending_ = true;
-    themeAt_ = now + 1000;
+    saves_.plotChanged(now);
     prefs_.useBuiltinTheme = 0;
     changed(now);
 }
@@ -260,7 +297,7 @@ void ApplicationController::showSettings() {
     }
     char saved[48];
     std::snprintf(saved, sizeof saved, "Saved: %s", storage::Layout::SettingsFile);
-    const char* status = savePending_ ? (usb_ && usb_->connected() ? "Saves when USB host disconnects" : "Saving settings...")
+    const char* status = saves_.settingsPending() ? (usb_ && usb_->connected() ? "Saves when USB host disconnects" : "Saving settings...")
         : preferences_.error() ? preferences_.error() : saved;
     view_.settings(settingsMenu_, settingsRows(), navigator_, status);
 }

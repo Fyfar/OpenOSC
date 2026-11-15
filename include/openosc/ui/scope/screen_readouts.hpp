@@ -16,5 +16,8 @@ public:
     // hidden from the pulse count.
     struct Resolution { bool edges, count; };
     static Resolution resolution(const ScreenSeries &series, unsigned channel);
+    // The uncertainty of frequency, period and duty from edges sampled at `samplesPerSecond`
+    // (Measurements::bound): what a series of this rate resolves at worst, phase-locked or not.
+    static void bound(scope::Measurements &values, double samplesPerSecond);
 };
 } // namespace openosc::plot

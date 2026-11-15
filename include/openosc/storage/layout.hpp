@@ -21,6 +21,9 @@ struct Layout {
     static constexpr const char *FactoryRootDirectories[] = {"/firmware", "/Application", "/log", "/pic", "/data"};
 
     static constexpr const char *SettingsFile = "/openosc/SETTINGS/settings.json";
+    // The 360 MHz start guard (BootGuard): "starting" before that profile runs, "ok" once confirmed.
+    static constexpr const char *BootGuardFile = "/openosc/SETTINGS/boot.json";
+    static constexpr const char *BootGuardPrevious = "/openosc/SETTINGS/boot.previous.json";
     static constexpr const char *ThemeFile = "/openosc/UI/theme.json";
     static constexpr const char *IconPrefix = "/openosc/UI/";            // Theme icons must lie here.
     static constexpr const char *ZeroFile = "/openosc/CALIBRATION/scope_zero.json";

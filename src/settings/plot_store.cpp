@@ -1,9 +1,4 @@
-#include "openosc/settings/theme_json.hpp"
-#include "openosc/storage/directories.hpp"
-#include "openosc/storage/layout.hpp"
 #include "openosc/settings/theme_store.hpp"
-#include "openosc/settings/theme_document.hpp"
-#include "openosc/storage/json_files.hpp"
 
 namespace openosc {
 bool ThemeStore::savePlot(const plot::Options &options) {
@@ -17,9 +12,7 @@ bool ThemeStore::savePlot(const plot::Options &options) {
     }
     auto candidate = theme_;
     candidate.plot = options;
-    char *buffer = ThemeScratch::input();
-    const auto bytes = ThemeJson::encode(candidate, buffer, ThemeScratch::InputCapacity);
-    if (!bytes || storage::ensureDirectory(storage::Layout::Ui) != FR_OK || !JsonFiles::write(storage::Layout::ThemeFile, buffer, bytes)) {
+    if (!write(candidate)) {
         error_ = "CANNOT SAVE DISPLAY JSON";
         return false;
     }

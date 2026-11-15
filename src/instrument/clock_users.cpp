@@ -9,7 +9,8 @@ ClockSuspend DataAccess::suspendClockUsers() {
     const uint32_t ownLeases = heldFrame_.valid() ? 1U : 0U; // HOLD keeps its record through the change.
     if (!initialized_ || stopping_ || zeroBusy() || recorder_.busy() || recordPending_ || dmmBusy() ||
         uart_.txStatus() == DataStatus::Busy || store_.busy() || retainedRegion_ || store_.readers() != ownLeases ||
-        generator_.clockBusy()) // A ZT706S module frame on the wire finishes first (~0.53 s).
+        generator_.clockBusy() || // A ZT706S module frame on the wire finishes first (~0.53 s).
+        StorageAdmission::active()) // A NOR transfer, or SPI streams not yet proven stopped (PLL and SPI4 must not change under them).
         return ClockSuspend::Busy;
     generatorRetime_ = generator_.enabled();
     serialRetime_ = serial_.enabled();

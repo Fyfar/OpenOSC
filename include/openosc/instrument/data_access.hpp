@@ -29,11 +29,15 @@
 #include "openosc/calibration/gain_file.hpp"
 #include "openosc/calibration/interleave_file.hpp"
 #include "openosc/calibration/scope_calibration.hpp"
+#include "openosc/storage/storage_admission.hpp"
 
 namespace openosc {
-class DataAccess : private calibration::ZeroInstrument {
+class DataAccess : private calibration::ZeroInstrument, private generator::BusClient, private StorageAdmission::Capture {
   public:
     explicit DataAccess(Filesystem &fs);
+    ~DataAccess() { StorageAdmission::detach(this); }
+    DataAccess(const DataAccess &) = delete;
+    DataAccess &operator=(const DataAccess &) = delete;
     bool initialize(MeasurementMode view);
     bool select(MeasurementMode view);
     void noteFrameDemand(uint32_t now) { frameRequestedAt_ = now; capturePaused_ = false; }
@@ -88,6 +92,17 @@ class DataAccess : private calibration::ZeroInstrument {
     // Single done, zero, AutoSetup, shutdown).
     bool forceScope();
     bool scopeHeld() const { return scopeHeld_; }
+    // HOLD waits for the running capture's record (one slot, at most HoldWaitMs): deferrable writes
+    // (background saves, the boot guard's confirmation) wait too, so their NOR transfers do not stop
+    // that capture and leave HOLD empty.
+    bool scopeHoldPending() const { return holdPending_; }
+    // usb::QuietClient's call (usb_quiet.cpp, through the controller's adapter): while a host
+    // enumerates, a fast capture stops and fast ones do not start; true once that holds. Apart from
+    // the overlay pause (pauseCapture): frame demand never ends it.
+    bool quietCapture(bool quiet);
+    // TRIG:STAT? WAIT and the trigger indicator (Normal, Single): from the arm until a record is
+    // accepted, and again once the running capture has waited TriggerWaitMs for an edge with its gate
+    // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
     bool sendDmmGroup(dmm::CommandGroup group);
     bool selectDmmFunction(dmm::Function function);
@@ -207,6 +222,19 @@ class DataAccess : private calibration::ZeroInstrument {
     bool configureScopeCore(const ScopeRequest &request,bool force=false,bool preserveRecord=false);
     void describeChannels(scope::FrameMetadata &metadata);
     bool generatorLoadsBus() const;
+    // The capture's share of the bus with the ZT703S DAC stream (bus_load.cpp, Q-14).
+    bool dacStreamStarting() override;
+    void followBusLoad();
+    bool yieldBus();
+    bool withinBusLimit() const;
+    // StorageAdmission::Capture (storage_yield.cpp): a NOR SPI transfer is about to start. Captures
+    // of at most SlowTransfers DMA transfers per second keep running through it.
+    bool yieldForStorage() override;
+    static constexpr double SlowTransfers = 10e6;
+    // A capture above SlowTransfers DMA transfers per second (both the storage yield and the USB quiet).
+    static bool fastTransfers(double pointsPerSecond, unsigned pointsPerTransfer) {
+        return pointsPerSecond / pointsPerTransfer > SlowTransfers;
+    }
     // The per-channel maximum at the running clock: its profile's ADC divider (RunMode), halved
     // while the DAC generator loads the bus.
     uint32_t captureRateLimit() const;
@@ -232,6 +260,7 @@ class DataAccess : private calibration::ZeroInstrument {
     void observeInterleave(const scope::FrameView &frame);
     bool describeNext(scope::FrameMetadata &metadata);
     void serviceScopeFrames(uint32_t now);
+    void followTriggerWait(uint32_t now);
     void applyForce(); // forceScope() on the running capture, once it is one that can take it.
     // A record the trigger mode lets through: in Auto any, in Normal/Single a trigger or a forced capture.
     bool triggerAccepts(const scope::FrameMetadata &frame, bool found) const;
@@ -292,6 +321,8 @@ class DataAccess : private calibration::ZeroInstrument {
     board::GeneratorOutput generator_;
     board::DmmSerialOutput serial_;
     bool clockSuspended_ = false, generatorRetime_ = false, serialRetime_ = false;
+    // busLoad_: the bus load the plans follow; busAnnounced_: a DAC stream starts right now.
+    bool busLoad_ = false, busAnnounced_ = false;
     dmm::PacketFramer framer_;
     dmm::Session meter_;
     dmm::FunctionSelector dmmSelector_;
@@ -325,5 +356,10 @@ class DataAccess : private calibration::ZeroInstrument {
     bool triggerWaiting_ = false;
     uint64_t dmmActivatedAtUs_ = 0, recordDeadlineUs_ = 0;
     DataStatus recordStatus_ = DataStatus::NoData;
+    // followTriggerWait: since when (armedAt_) the capture armedSequence_ has been seen Armed.
+    static constexpr uint32_t TriggerWaitMs = 250;
+    uint32_t armedSequence_ = 0, armedAt_ = 0;
+    bool armedSeen_ = false;
+    bool usbQuiet_ = false; // quietCapture(true): no fast capture starts.
 };
 } // namespace openosc

@@ -41,12 +41,21 @@ public:
     // A selected measurement (Measurements::Tags/Units) as form `index` of Forms, most precise first:
     // three digits, two, two at the next prefix or in fixed-decimal percent; then the same two
     // with the short tag ("Mx", "D", "F" for FC); then one digit, with each tag. mark follows the tag:
-    // "~" a frequency or period from the spectrum (FrequencySource::Spectrum), "?" a suspect
+    // "~" a frequency or period from the spectrum (FrequencySource::Spectrum) or a value its basis
+    // resolves to fewer than two digits (Measurements::approximate), "?" a suspect
     // counter. Last, Overflow: "OVR", only for a value no other form can write. A percent below
     // 100 that a form rounds to 100 reads as its bound (">99.9%", ">99.99%"), never "100%". False
     // for a form the value has not (an Off slot has none). Widths in the font of `size`.
+    // limit: a bounded value's significant digits (Measurements::digits; 0: unbounded, the forms as
+    // they are). No form then shows more, a coarse form's fixed decimals included ("12.35kHz" and
+    // ">99.99%" are refused at 2 or 3), and ">99%" is that value's bound at two.
     static constexpr unsigned Forms = 10, Overflow = Forms - 1;
-    static bool form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size = 12);
+    static bool form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size = 12,
+                     unsigned limit = 0);
+    // How a computed value reads in any layout (footer panels, Legacy): its mark ("~": a tone from
+    // the spectrum, or approximate) and its digit limit (0 without a bound: Full, Vpp, ...).
+    struct Presentation { const char *mark = ""; unsigned limit = 0; };
+    static Presentation presentation(const scope::Measurements &values, scope::Measurement kind);
     static unsigned digits(unsigned index); // The significant digits form `index` keeps (0: OVR).
     static const char *basisName(scope::ReadoutBasis basis) { return basis==scope::ReadoutBasis::Record ? "Full" : "Scrn"; }
 };

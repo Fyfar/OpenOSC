@@ -31,6 +31,9 @@ public:
     enum class Force { Refused, Forced, Triggered };
     Force force();
     bool timedOut(uint32_t now) const;
+    // Its pre-trigger part filled and the comparator armed: an edge (or Auto's timeout, a force) is
+    // all it waits for. Not while Filling, nor once triggered (Post, Complete).
+    bool armed() const { return phase_==Phase::Armed; }
     static void exti0();
     static void exti15();
     static void timer();

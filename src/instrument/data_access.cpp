@@ -7,9 +7,17 @@
 #include <algorithm>
 
 namespace openosc {
+namespace {
+// The ZT703S DAC stream announces its start; the ZT706S module (UART, no DMA) has nothing to announce.
+void attachBus(generator::Output &output, generator::BusClient &client) { output.attach(client); }
+void attachBus(generator::ModuleOutput &, generator::BusClient &) {}
+} // namespace
 DataAccess::DataAccess(Filesystem &fs)
     : resources_(PeripheralResources::StorageDma), zeroFile_(fs),pwmFile_(fs,calibration_),gainFile_(fs,calibration_),interleaveFile_(fs,calibration_),zeroOperation_(*this), frontend_(scopeCalibration_), capture_(resources_, frontend_), counters_(resources_), uart_(resources_),
-      generator_(resources_), serial_(resources_), recorder_(fs), logger_(fs) {}
+      generator_(resources_), serial_(resources_), recorder_(fs), logger_(fs) {
+    attachBus(generator_, *this);
+    StorageAdmission::attach(this); // NOR SPI transfers ask the capture to yield first.
+}
 bool DataAccess::initialize(MeasurementMode view) {
     CalibrationRecord record;
     record.load(calibration_);
@@ -89,7 +97,8 @@ bool DataAccess::activate(MeasurementMode view) {
     return activateScope();
 }
 bool DataAccess::generatorLoadsBus() const {
-    return generator_.loadsBus(); // The ZT703S DAC stream; the ZT706S module's UART never.
+    // The ZT703S DAC stream, also while it announces its start; the ZT706S module's UART never.
+    return generator_.loadsBus() || busAnnounced_;
 }
 bool DataAccess::findTrigger(const scope::FrameView &frame,uint32_t &index) {
     if (frame.metadata().rolling) return false;

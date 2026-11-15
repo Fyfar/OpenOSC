@@ -32,6 +32,7 @@ bool Output::configure(const Settings &settings) {
         settings_ = previousSettings; plan_ = previousPlan; activeBank_ = previousBank; configured_ = wasConfigured;
         if (wasConfigured && apply()) status_ = failure;
         else status_ = DataStatus::HardwareError;
+        releaseStopped();
         return false;
     }
     status_ = DataStatus::Ok;
@@ -88,6 +89,11 @@ bool Output::apply() {
         HAL_GPIO_Init(GPIOA, &gpio);
         TIM13->CR1 = TIM_CR1_ARPE | TIM_CR1_CEN;
     } else {
+        // The capture yields the bus first: no BDMA request while it runs above the loaded rate.
+        if (client_ && !client_->dacStreamStarting()) {
+            status_ = DataStatus::Busy;
+            return false;
+        }
         gpio.Mode = GPIO_MODE_ANALOG;
         HAL_GPIO_Init(GPIOA, &gpio);
         TIM6->CR1 = 0;
@@ -99,8 +105,8 @@ bool Output::apply() {
         DAC2->MCR = 0;
         DAC2->DHR12R1 = tables[activeBank_][0];
         DMAMUX2_Channel0->CCR = BDMA_REQUEST_DAC2_CH1;
-        BDMA2_Channel0->CPAR = reinterpret_cast<uint32_t>(&DAC2->DHR12R1);
-        BDMA2_Channel0->CM0AR = reinterpret_cast<uint32_t>(tables[activeBank_]);
+        BDMA2_Channel0->CPAR = uint32_t(reinterpret_cast<uintptr_t>(&DAC2->DHR12R1));
+        BDMA2_Channel0->CM0AR = uint32_t(reinterpret_cast<uintptr_t>(tables[activeBank_]));
         BDMA2_Channel0->CNDTR = plan_.count;
         BDMA2_Channel0->CCR =
             BDMA_CCR_DIR | BDMA_CCR_CIRC | BDMA_CCR_MINC | BDMA_CCR_PSIZE_0 | BDMA_CCR_MSIZE_0;
@@ -124,7 +130,15 @@ bool Output::enable() {
         status_ = DataStatus::Busy;
         return false;
     }
-    return apply();
+    if (apply()) return true;
+    releaseStopped();
+    return false;
+}
+// After a start that did not go through: once this output's own DAC stream is confirmed stopped,
+// the jack and its DMA go back (the DMM serial output may take them). A halt whose BDMA would not
+// disable keeps them: that stream may still be running.
+void Output::releaseStopped() {
+    if (!enabled_ && !(BDMA2_Channel0->CCR & BDMA_CCR_EN)) lease_.release();
 }
 void Output::disable() {
     if (lease_.valid()) {

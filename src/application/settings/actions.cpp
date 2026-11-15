@@ -33,9 +33,9 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
             view_.notify(preferences_.error(), now);
             break;
         }
-        themePending_ = false;
+        saves_.dropTheme();
         prefs_ = preferences_.values();
-        savePending_ = false;
+        saves_.dropSettings();
         applyPreferences();
         const auto applied = applyDataPreferences();
         if (prefs_.useBuiltinTheme) themes_.defaults();
@@ -47,15 +47,16 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
     }
     case ui::SettingsAction::ReloadTheme:
         if (themes_.reload()) {
-            themePending_ = false;
+            saves_.dropTheme();
             prefs_.useBuiltinTheme = 0;
             changed(now);
             view_.build(themes_.theme());
-            view_.notify(themes_.repaired() ? "Bad theme archived; defaults restored" : "Theme loaded", now);
+            const char *notice = ThemeNotice::text(themes_);
+            view_.notify(notice ? notice : "Theme loaded", now);
         } else view_.notify(themes_.error(), now);
         break;
     case ui::SettingsAction::BuiltinTheme:
-        themePending_ = false;
+        saves_.dropTheme();
         themes_.defaults();
         prefs_.useBuiltinTheme = 1;
         changed(now);

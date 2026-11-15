@@ -43,6 +43,8 @@ public:
     // TFOR on the running triggered capture (TriggerGate::force): true when its record is on the way,
     // forced (FrameMetadata::forced) or already triggered; false with no gated capture to force.
     bool force();
+    // A running gated record whose trigger gate is Armed (TriggerGate::armed): waiting for its edge.
+    bool awaitingTrigger() const { return gated_ && !frozen_ && mailbox_.state()==FrameMailbox::State::Capturing && gate_.armed(); }
     void service(uint32_t nowMs);
     FrameMailbox::State state() const { return mailbox_.state(); }
     DataStatus status() const { return status_; }

@@ -49,7 +49,7 @@ if image_kind == "application":
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         image = Path(str(target[0]))
-        output = image.with_suffix(".OSC")
+        output = image.with_name(module.image_name(board))
         marked = module.add_trailer(image.read_bytes(), board)
         image.write_bytes(marked)
         output.write_bytes(module.package(marked, version, board))

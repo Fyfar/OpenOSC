@@ -8,6 +8,10 @@ namespace openosc {
 class SpiDma {
 public:
     void initialize();
+    // One transfer under StorageAdmission (the capture yields first); false also when it refused.
     bool transfer(const uint8_t *write,uint8_t *read,size_t size);
+private:
+    static bool exchange(const uint8_t *write,uint8_t *read,size_t size,bool &stopped);
+    static bool stopStreams();
 };
 } // namespace openosc

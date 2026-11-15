@@ -1,5 +1,8 @@
 #include "openosc/storage/spi_bus.hpp"
 #include "openosc/platform/board.hpp"
+#ifdef OPENOSC_APPLICATION
+#include "openosc/storage/storage_admission.hpp"
+#endif
 
 namespace openosc {
 bool SpiBus::initialize() {
@@ -51,6 +54,11 @@ bool SpiBus::initialize() {
 bool SpiBus::transaction(const uint8_t* command, uint16_t commandSize,
                          const uint8_t* write, uint8_t* read, size_t size) {
     if (!command || !commandSize || (size && !write && !read) || (write && read)) return false;
+#ifdef OPENOSC_APPLICATION
+    // Nested in a transfer in progress (StorageAdmission): refused before chip select changes. A
+    // failed stop of an ended transfer is no transaction in progress; SpiDma retries it first.
+    if (StorageAdmission::active() && !StorageAdmission::stuck()) return false;
+#endif
     GPIOE->BSRR = uint32_t(GPIO_PIN_4) << 16;
     bool success =
 #ifdef OPENOSC_APPLICATION

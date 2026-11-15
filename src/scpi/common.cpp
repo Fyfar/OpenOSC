@@ -40,6 +40,15 @@ bool Engine::common(const Command &c) {
                 static_cast<unsigned long>(p.captures),static_cast<unsigned long>(p.projections),
                 static_cast<unsigned long>(p.flushes),elapsed,ui);
         }
+    } else if (match("SYSTem:MEMory")) {
+        // valid,total,used,peak,free,largest_free,fragmentation_pct (bytes): the GUI heap, walked once
+        // per query. Without one (headless, display not initialized): 0 and NAN, nothing invented.
+        MemorySnapshot m;
+        if (!c.query || *c.argument) error(-108,c.query);
+        else if (!backend_.memory(m)) reply("0,NAN,NAN,NAN,NAN,NAN,NAN");
+        else reply("1,%lu,%lu,%lu,%lu,%lu,%u",static_cast<unsigned long>(m.total),static_cast<unsigned long>(m.used),
+                   static_cast<unsigned long>(m.peak),static_cast<unsigned long>(m.free),
+                   static_cast<unsigned long>(m.largestFree),unsigned(m.fragmentationPct));
     } else if (match("SYSTem:CLOCk:MODE")) {
         if (c.query) { if (*c.argument) error(-108,true); else reply("%lu", static_cast<unsigned long>(backend_.coreMhz())); }
         else {

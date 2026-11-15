@@ -32,6 +32,12 @@ bool ScreenshotWriter::start(const uint16_t* frame) {
     }
     return fail("SCREENSHOT NAME LIMIT REACHED");
 }
+void ScreenshotWriter::cancel() {
+    if (!open_) return;
+    f_close(&file_);
+    f_unlink(temporary_);
+    open_ = false; complete_ = false; error_ = "SCREENSHOT CANCELLED";
+}
 void ScreenshotWriter::service() {
     if (!open_) return;
     const size_t chunk = image_.read(position_, buffer_, sizeof buffer_);

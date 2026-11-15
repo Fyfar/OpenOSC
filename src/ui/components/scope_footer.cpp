@@ -144,9 +144,12 @@ void ScopeFooter::readoutPanel(unsigned c) {
             if (item.valid) item.mark = reading.quality == scope::CounterQuality::Filtered ? (suspect ? "f?" : "f") : suspect ? "?" : "";
         } else {
             if (!model_) continue;
-            item.valid = computed && result_.values[c].value(scope::Measurement(kind), item.value);
-            if (item.valid && (kind == unsigned(scope::Measurement::Frequency) || kind == unsigned(scope::Measurement::Period)) &&
-                result_.values[c].frequencySource() == scope::FrequencySource::Spectrum) item.mark = "~";
+            const auto measurement = scope::Measurement(kind);
+            item.valid = computed && result_.values[c].value(measurement, item.value);
+            if (item.valid) {
+                const auto shown = ReadoutText::presentation(result_.values[c], measurement);
+                item.mark = shown.mark; item.limit = shown.limit;
+            }
         }
         item.kind = kind;
     }

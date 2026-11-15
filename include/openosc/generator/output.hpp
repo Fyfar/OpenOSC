@@ -3,10 +3,19 @@
 #include "openosc/platform/resources.hpp"
 
 namespace openosc::generator {
+// Whom the DAC stream's bus load concerns (Q-14): told before the stream's first BDMA request, on
+// every start (enable, a configure or retime while enabled). False keeps the stream off (Busy).
+class BusClient {
+public:
+    virtual bool dacStreamStarting() = 0;
+protected:
+    ~BusClient() = default;
+};
 class Output {
 public:
     explicit Output(PeripheralResources &resources) : resources_(resources) {}
     ~Output() { disable(); }
+    void attach(BusClient &client) { client_ = &client; }
     bool configure(const Settings &settings);
     bool enable();
     void disable();
@@ -32,7 +41,9 @@ public:
 private:
     bool apply();
     bool halt();
+    void releaseStopped();
     PeripheralResources &resources_;
+    BusClient *client_ = nullptr;
     PeripheralLease lease_;
     Settings settings_;
     OutputPlan plan_;

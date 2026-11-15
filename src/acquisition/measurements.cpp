@@ -46,6 +46,21 @@ Measurements Measurements::calculate(const SignalSummary &s, const ChannelMetada
             result.valid_ |= 1U << i;
     return result;
 }
+void Measurements::bound(Measurement kind, double uncertainty) {
+    const auto i = unsigned(kind);
+    if (i < Count && std::isfinite(uncertainty) && uncertainty > 0) bounds_[i] = float(uncertainty);
+}
+// The value's leading digit at 10^e, the uncertainty's at 10^k: digits down to 10^k, e - k + 1.
+int Measurements::supported(Measurement kind) const {
+    double v = 0;
+    const double u = uncertainty(kind);
+    if (!value(kind, v) || !(u > 0) || !(std::abs(v) > 0)) return int(MaximumDigits);
+    return int(std::floor(std::log10(std::abs(v)))) - int(std::floor(std::log10(u))) + 1;
+}
+unsigned Measurements::digits(Measurement kind) const {
+    return unsigned(std::clamp(supported(kind), int(MinimumDigits), int(MaximumDigits)));
+}
+bool Measurements::approximate(Measurement kind) const { return supported(kind) < int(MinimumDigits); }
 bool CounterCheck::suspect(const CounterReading &counter, const Measurements &record, uint64_t recordTimestampUs) {
     double hertz = 0;
     if (!counter.valid || !counter.gateUs || record.frequencySource() != FrequencySource::Edges || !(record.frequencySpan() > 0) ||

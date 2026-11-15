@@ -60,7 +60,7 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
     case Outcome::Changed: // A committed field; the interleave offset's edit puts it in force (not saved).
         calibrationDraft_ = rows.calibration();
         if (settingsMenu_.current().action == ui::SettingsAction::InterleaveOffset) interleaveAction(ui::SettingsAction::InterleaveOffset, now);
-        else applySettings(rows.preferences(), now);
+        else applySettings(rows.preferences(), now, settingsMenu_.current().action == ui::SettingsAction::RunProfile);
         break;
     case Outcome::Stepped: case Outcome::Restored: // A number in progress: brightness previews live, the rest is a draft.
         calibrationDraft_ = rows.calibration(); applySettings(rows.preferences(), now); break;
@@ -70,8 +70,8 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
 }
 // A Settings choice (or a brightness step, or its F4 restore): what differs from the preferences in
 // force is applied; run mode and record memory through the instrument, which may refuse them.
-void ApplicationController::applySettings(const Preferences &chosen, uint32_t now) {
-    if (chosen.scope.runMode != prefs_.scope.runMode) {
+void ApplicationController::applySettings(const Preferences &chosen, uint32_t now, bool runModeChosen) {
+    if (RunModeChoice::changes(chosen.scope.runMode, prefs_.scope.runMode, ClockControl::activeMode(), runModeChosen)) {
         const auto result = changeRunMode(chosen.scope.runMode, now);
         char text[64];
         if (result.outcome == RunModeSwitch::Outcome::Applied && result.active == OverclockedRunMode)

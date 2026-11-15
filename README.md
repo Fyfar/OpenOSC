@@ -167,9 +167,8 @@ OpenOSC has no tool to restore the backup. Writing it back requires an SWD progr
 1. Start Recovery. It opens automatically when no valid firmware is installed.
    Later, you can open it by holding **F2** while the device starts.
 2. Connect the device to a computer. Recovery shows the device's storage as a USB drive.
-3. Copy the `.OSC` file for your model into `/openosc/UPDATE/`: `OpenOSC-Firmware-ZT703S.OSC` or
-   `OpenOSC-Firmware-ZT706S.OSC` from the release, or `firmware.OSC` (or `firmware.bin`) from your
-   own build.
+3. Copy the firmware file for your model into `/openosc/UPDATE/`: `OpenOSC-Firmware-ZT703S.OSC` or
+   `OpenOSC-Firmware-ZT706S.OSC` (from the release or your own build).
 4. Finish copying. Optionally, eject the drive on the computer.
 5. On the device, select **UPDATE FIRMWARE**, choose the file, select **CONFIRM** and press **MENU**.
 6. When the update completes, select **START APPLICATION**.
@@ -215,8 +214,8 @@ This builds both devices. Output files:
 
 | Device | Recovery (step 1) | Firmware (step 2) |
 | --- | --- | --- |
-| ZT703S | `.pio/build/recovery/OpenOSC-Recovery-ZT703S.ZTK` | `.pio/build/firmware/firmware.OSC` |
-| ZT706S | `.pio/build/zt706s_recovery/OpenOSC-Recovery-ZT706S.ZTK` | `.pio/build/zt706s_firmware/firmware.OSC` |
+| ZT703S | `.pio/build/recovery/OpenOSC-Recovery-ZT703S.ZTK` | `.pio/build/firmware/OpenOSC-Firmware-ZT703S.OSC` |
+| ZT706S | `.pio/build/zt706s_recovery/OpenOSC-Recovery-ZT706S.ZTK` | `.pio/build/zt706s_firmware/OpenOSC-Firmware-ZT706S.OSC` |
 
 Each build folder also contains `firmware.bin`. For the firmware environments, this `.bin`
 has a board marker and Recovery accepts it as well.

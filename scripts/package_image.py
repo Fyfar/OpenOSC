@@ -13,6 +13,11 @@ TRAILER_MAGIC = b"OSCTRLR1"
 TRAILER = struct.Struct("<8s5I")
 
 
+def image_name(board):
+    """The packaged application's file name, next to firmware.bin: OpenOSC-Firmware-ZT703S.OSC."""
+    return f"OpenOSC-Firmware-{board.name}.OSC"
+
+
 def read_trailer(image):
     """Return (board_id, program_bytes) of a valid trailer, or None for an unmarked image."""
     if len(image) < TRAILER.size:

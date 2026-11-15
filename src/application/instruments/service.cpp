@@ -16,11 +16,12 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         lastSelection_ = selection;
         if (visible) refreshMeterPanel();
     }
+    // Decided once, or dropped when it can no longer happen (not the DMM, a failed selection).
+    const bool restoreDue = meterRestore_.due(data_.measurementMode(), data_.dmmSelectionStatus(), data_.dmmBusy());
     if (data_.measurementMode() == MeasurementMode::Multimeter && data_.dmmSelectionStatus() == DataStatus::Ok && !data_.dmmBusy()) {
         const auto &result = data_.meter().latest();
         const auto function = dmm::Functions::identify(result);
-        if (meterRestore_ && function != dmm::Function::Unknown) {
-            meterRestore_ = false;
+        if (restoreDue) { // Another or an unknown function: restores() is false, nothing is sent, prefs stay.
             if (MeterRangeMemory::restores(prefs_.meter, prefs_.meterFunction, function, result.range)) {
                 const bool accepted = prefs_.meter.automatic ? data_.setDmmAuto(true) : data_.setDmmRange(prefs_.meter.range);
                 if (!accepted && visible) view_.notify("Saved DMM range could not be applied",now);

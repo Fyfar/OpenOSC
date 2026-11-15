@@ -23,6 +23,7 @@ public:
         bool valid = false;
         double value = 0;
         const char *mark = "";
+        unsigned limit = 0; // Significant digits of a bounded value (ReadoutText::form); 0: unbounded.
     };
     struct Placed {
         ReadoutParts parts;

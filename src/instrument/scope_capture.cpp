@@ -296,6 +296,13 @@ bool DataAccess::startCapture() {
     captureWaiting_ = false;
     if ((scopeHeld_ && !holdPending_) || !active_ || stopping_ || captureFailed_) // A pending HOLD's retry may start.
         return false;
+    // A NOR SPI transfer is admitted (StorageAdmission): its end or a later poll starts this capture,
+    // as a capture waiting for memory. Held back by SPI streams whose stop was not proven, the
+    // instrument reads HardwareError until the retry proves it (the start then reports Ok).
+    if (StorageAdmission::active()) {
+        if (StorageAdmission::stuck()) status_ = DataStatus::HardwareError;
+        captureWaiting_ = true; return false;
+    }
     releaseCaptureRegion(); // A faulted capture's memory first; a running capture is left alone.
     if (capture_.state() != scope::FrameMailbox::State::Idle || captureRegion_) return false;
     // The forced capture ended without a record (fault, timeout, stop for a clock change): force the next.
@@ -309,6 +316,15 @@ bool DataAccess::startCapture() {
         status_ = status; captureFailed_ = true; captureRetryAt_ = Board::milliseconds() + CaptureRetryMs;
         return false;
     };
+    // A host enumerates (quietCapture): a fast plan waits, as a capture waiting for memory, decided
+    // from the plan alone before any memory is claimed or a shown record given up; slow records,
+    // Roll and a pending HOLD's capture start.
+    if (usbQuiet_ && !holdPending_) {
+        scope::SamplePlan planned; scope::CaptureBuffer laid; bool roll = false;
+        if (planCapture(planned, laid, roll) && fastTransfers(planned.rate.value(), laid.pointsPerTransfer())) {
+            captureWaiting_ = true; return false;
+        }
+    }
     if (!reserveCapture(rolling, buffer)) return captureWaiting_ ? false : refused(DataStatus::Unsupported);
     if (!samplePlan(plan, buffer, rolling)) {
         arena_.release(captureRegion_); captureRegion_ = 0;
@@ -455,6 +471,23 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         releaseCaptureRegion();
         if (holdPending_) store_.acquireLatest(heldFrame_);
     }
+    followTriggerWait(now);
+}
+// WAIT again after an accepted record: Normal (or a Single not yet complete) whose running capture
+// has been Armed - its pre-trigger part filled, an edge all it waits for - for TriggerWaitMs. On a
+// signal that triggers each capture the gate is Armed for at most the time to the next edge, so
+// the state stays RUN (trigger rates below about 1000 / TriggerWaitMs Hz do read WAIT between
+// edges, as the scope then is waiting). Filling, Post, a restart, a capture waiting for memory or
+// paused prove nothing: the state stays as it is, so restarts and clock changes never toggle it.
+// An accepted record ends WAIT (serviceScopeFrames); configure, RUN and HOLD set it as before.
+// Times are modular milliseconds; a capture is followed by its sequence.
+void DataAccess::followTriggerWait(uint32_t now) {
+    const bool armed = request_.trigger.mode != scope::TriggerMode::Auto && active_ && !stopping_ && !scopeHeld_ &&
+                       measurement_ == MeasurementMode::Oscilloscope && !internalCapture() && capture_.awaitingTrigger();
+    if (!armed) { armedSeen_ = false; return; }
+    const uint32_t sequence = capture_.metadata().sequence;
+    if (!armedSeen_ || armedSequence_ != sequence) { armedSeen_ = true; armedSequence_ = sequence; armedAt_ = now; return; }
+    if (uint32_t(now - armedAt_) >= TriggerWaitMs) triggerWaiting_ = true;
 }
 // Fault handling and restart. A faulted capture has cancelled its mailbox; its memory is returned
 // before the retry, so neither the 512 KiB arena nor a slot can stay claimed by a dead capture.

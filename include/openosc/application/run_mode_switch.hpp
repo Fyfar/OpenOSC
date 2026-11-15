@@ -8,6 +8,10 @@ namespace openosc {
 // A run-mode (core clock) change without a restart, as one ordered transaction:
 //   1. suspend: every PLL1-timed user stops (Busy: nothing changed, the old mode keeps running;
 //      Disrupted: the clock is unchanged but a user that stopped did not start again);
+//      prepare(target), once the users and the host link are stopped and before PLL1 changes (the
+//      360 MHz guard is written here: no NOR write with a live USB link, STORE-02). Refusing it ends
+//      the change as Unguarded: the users resume and the link settles on the unchanged profile. A
+//      rollback retime after a failed target never prepares again;
 //   2. retime: PLL1 to the target profile;
 //      on failure the previous profile, then profile 0, so the instrument stays usable;
 //   3. resume: the users start again from the bus clocks actually running.
@@ -23,6 +27,9 @@ public:
     public:
         virtual ~Steps() = default;
         virtual ClockSuspend suspend() = 0;
+        virtual bool prepare(uint32_t target) { (void)target; return true; } // False: `target` may not run now.
+        // After resume, before the link settles (still no USB): the profile that ran before and now.
+        virtual void finished(uint32_t previous, uint32_t active) { (void)previous; (void)active; }
         virtual bool retime(uint32_t mode) = 0;       // True when `mode` now runs.
         virtual bool resume() = 0;
         virtual uint32_t active() const = 0;          // ClockControl::activeMode(): RunModeCount if none.
@@ -46,10 +53,19 @@ public:
         Fallback,     // Target and previous failed; profile 0 runs.
         Failed,       // No profile locked: the core stays on HSI (users resumed at its clocks).
         ResumeFailed, // The clock change held, but a user did not start again (its status says why).
+        Unguarded,    // prepare() refused the target (the 360 MHz guard could not be written): unchanged.
     };
     struct Result { Outcome outcome; uint32_t active; };
     static Result change(Steps &steps, uint32_t target, Link &link);
     static const char *describe(Outcome outcome);
+};
+// Whether a Settings choice changes the run mode: when it differs from the saved setting, or (only when
+// the Run mode row itself was committed) from the profile that runs. A saved 360 running at 200 (an
+// unavailable guard) is then retried by choosing 360 again, while other edits never start it.
+struct RunModeChoice {
+    static constexpr bool changes(uint32_t chosen, uint32_t saved, uint32_t active, bool committedRow) {
+        return chosen != saved || (committedRow && chosen != active);
+    }
 };
 // USB Remote runs at 200 MHz (100 MS/s per channel), the only profile with a USB data link: Remote is
 // entered only when that profile runs with every user resumed, and changes made for Remote never

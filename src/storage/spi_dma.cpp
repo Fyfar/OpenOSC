@@ -3,6 +3,7 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/dma_stream.hpp"
 #include "openosc/platform/cooperative_service.hpp"
+#include "openosc/storage/storage_admission.hpp"
 #include <cstring>
 
 namespace openosc {
@@ -20,11 +21,27 @@ void SpiDma::initialize() {
     DMAMUX1_Channel11->CCR=DMA_REQUEST_SPI4_RX;
     DMAMUX1_Channel12->CCR=DMA_REQUEST_SPI4_TX;
 }
+// Admitted first (StorageAdmission): the capture yields before the buffers are touched or a stream
+// is enabled, and may start again only once both streams are proven stopped and `read` holds the data.
 bool SpiDma::transfer(const uint8_t *write,uint8_t *read,size_t size) {
-    if (!size || size>sizeof transmit) return false;
+    if (!size || size>sizeof transmit || !StorageAdmission::begin()) return false;
+    bool stopped=false;
+    const bool done=exchange(write,read,size,stopped);
+    StorageAdmission::end(stopped,&SpiDma::stopStreams);
+    return done;
+}
+// Both streams disabled (a P2M FIFO drained) and their flags cleared: the retry of a stop that failed.
+bool SpiDma::stopStreams() {
+    const bool rxStopped=DmaStream::disable(DMA2_Stream3),txStopped=DmaStream::disable(DMA2_Stream4);
+    DMA2->LIFCR=RxFlags; DMA2->HIFCR=TxFlags;
+    __DMB();
+    return rxStopped && txStopped;
+}
+bool SpiDma::exchange(const uint8_t *write,uint8_t *read,size_t size,bool &stopped) {
+    if (!DmaStream::disable(DMA2_Stream3) || !DmaStream::disable(DMA2_Stream4)) return false;
+    stopped=true; // Both idle from here until they are enabled below.
     if (write) std::memcpy(transmit,write,size);
     else std::memset(transmit,0xff,size);
-    if (!DmaStream::disable(DMA2_Stream3) || !DmaStream::disable(DMA2_Stream4)) return false;
     SPI4->CR1 &= ~SPI_CR1_SPE;
     SPI4->IER=0;
     for (unsigned drained=0; (SPI4->SR & SPI_SR_RXP) && drained<32; ++drained)
@@ -36,18 +53,25 @@ bool SpiDma::transfer(const uint8_t *write,uint8_t *read,size_t size) {
     SPI4->CR1=SPI_CR1_SSI;
     SPI4->CR2=uint32_t(size);
     DMA2->LIFCR=RxFlags; DMA2->HIFCR=TxFlags;
-    DMA2_Stream3->PAR=reinterpret_cast<uint32_t>(&SPI4->RXDR);
-    DMA2_Stream3->M0AR=reinterpret_cast<uint32_t>(receive);
+    // Memory side in words when the byte count allows it (RM0455 15.3.12, Table 90: PSIZE byte with
+    // MSIZE word needs NDT a multiple of 4; packing needs the FIFO, DMDIS): a quarter of the memory-port
+    // accesses for the data blocks (4096, 512, 256 bytes), which share DMA2's one memory port with capture
+    // lanes 1 and 3. Transfers whose length is not a multiple of four remain byte-wide. The buffers are 32-byte aligned
+    // (word M0AR); peripheral-to-memory TCIF follows the FIFO flush (15.3.15), so `receive` holds every
+    // word when it is read.
+    const uint32_t memoryWidth=size%4==0 ? DMA_SxCR_MSIZE_1 : 0U;
+    DMA2_Stream3->PAR=uint32_t(reinterpret_cast<uintptr_t>(&SPI4->RXDR));
+    DMA2_Stream3->M0AR=uint32_t(reinterpret_cast<uintptr_t>(receive));
     DMA2_Stream3->NDTR=size;
     // The FIFO absorbs SPI requests while AXI is arbitrated with acquisition
     // and display DMA. Direct TX mode can raise FE even on a short transfer.
     DMA2_Stream3->FCR=DMA_SxFCR_DMDIS|DMA_SxFCR_FTH;
-    DMA2_Stream3->CR=DMA_SxCR_MINC|(3U<<16);
-    DMA2_Stream4->PAR=reinterpret_cast<uint32_t>(&SPI4->TXDR);
-    DMA2_Stream4->M0AR=reinterpret_cast<uint32_t>(transmit);
+    DMA2_Stream3->CR=DMA_SxCR_MINC|memoryWidth|(3U<<16);
+    DMA2_Stream4->PAR=uint32_t(reinterpret_cast<uintptr_t>(&SPI4->TXDR));
+    DMA2_Stream4->M0AR=uint32_t(reinterpret_cast<uintptr_t>(transmit));
     DMA2_Stream4->NDTR=size;
     DMA2_Stream4->FCR=DMA_SxFCR_DMDIS|DMA_SxFCR_FTH;
-    DMA2_Stream4->CR=DMA_SxCR_MINC|DMA_SxCR_DIR_0|(3U<<16);
+    DMA2_Stream4->CR=DMA_SxCR_MINC|memoryWidth|DMA_SxCR_DIR_0|(3U<<16);
     __DMB();
     DMA2_Stream3->CR |= DMA_SxCR_EN;
     SPI4->CFG1 |= SPI_CFG1_RXDMAEN;
@@ -69,11 +93,9 @@ bool SpiDma::transfer(const uint8_t *write,uint8_t *read,size_t size) {
     }
     SPI4->CR1 &= ~SPI_CR1_SPE;
     SPI4->CFG1 &= ~(SPI_CFG1_RXDMAEN|SPI_CFG1_TXDMAEN);
-    const bool rxStopped=DmaStream::disable(DMA2_Stream3),txStopped=DmaStream::disable(DMA2_Stream4);
+    stopped=stopStreams();
     SPI4->IFCR=SpiFlags;
-    DMA2->LIFCR=RxFlags; DMA2->HIFCR=TxFlags;
-    __DMB();
-    if (!complete || !rxStopped || !txStopped) return false;
+    if (!complete || !stopped) return false;
     if (read) std::memcpy(read,receive,size);
     return true;
 }

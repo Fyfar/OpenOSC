@@ -30,9 +30,9 @@ public:
     static void expect(uint32_t ms);  // An operation of up to `ms` (bounded) in this pass.
     // A failure the image cannot continue from: recorded, never fed again, reset by the watchdog.
     [[noreturn]] static void fatal(uint32_t error);
-    // Power off: the latch is released; if the MCU still has power it stays parked and fed, as
-    // before the watchdog work (Q-08 is a separate task).
-    [[noreturn]] static void park();
+    // Soft off only (PowerControl::powerOff, docs/POWER.md): feeds the IWDG and an inherited WWDG
+    // whatever the context, interrupts masked and the ms tick stopped included. Nothing else may.
+    static void terminalFeed();
     static uint32_t status();
     static const WatchdogPolicy &policy();
 };

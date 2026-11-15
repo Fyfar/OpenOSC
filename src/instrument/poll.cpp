@@ -6,7 +6,9 @@ namespace openosc {
 void DataAccess::serviceStreams(uint32_t now) {
     timeUs_ += uint64_t(uint32_t(now - previousTick_)) * 1000;
     previousTick_ = now;
+    StorageAdmission::service(now); // A NOR SPI stop that failed is tried again: the barrier goes once it holds.
     generator_.service();
+    followBusLoad(); // After a generator fault too: the plans follow the bus load it leaves.
     if (active_ && !stopping_ && measurement_==MeasurementMode::Oscilloscope) counters_.service(now);
     uart_.service(now);
     capture_.service(now);

@@ -6,9 +6,9 @@ namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     // AUTO/RANGE short press: the factory's 20 20 (703S 08044274, 706S 08044BE4): AUTO -> Manual, then
     // the next range. Its hold returns to AUTO (onKeys).
-    if ((keys & Keypad::AutoRange) && !data_.advanceDmmRange()) view_.notify("Range command busy", now);
+    if ((keys & Keypad::AutoRange) && !meterCommand(data_.advanceDmmRange())) view_.notify("Range command busy", now);
     if ((keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
-        !data_.stepDmmRange(keys & Keypad::Up ? 1 : -1))
+        !meterCommand(data_.stepDmmRange(keys & Keypad::Up ? 1 : -1)))
         view_.notify("Range command busy", now);
     if (keys & (Keypad::Left | Keypad::Right)) {
         constexpr uint32_t n = MeterPreferences::Displays;
@@ -31,12 +31,12 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     if (keys & Keypad::F3) group = dmm::CommandGroup::Current;
     if (keys & Keypad::F4)
         group = data_.meter().latest().currentInput ? dmm::CommandGroup::Milliamps : dmm::CommandGroup::Millivolts;
-    if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !data_.sendDmmGroup(group))
+    if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !meterCommand(data_.sendDmmGroup(group)))
         view_.notify("Measurement command busy", now);
 }
 // AUTO/RANGE hold: the factory's 22 22 after ~2 s (703S 0804423C, 706S 08044BAC): AUTO again.
 void ApplicationController::meterRangeHold(uint32_t now) {
-    if (!data_.setDmmAuto(true)) view_.notify("Range command busy", now);
+    if (!meterCommand(data_.setDmmAuto(true))) view_.notify("Range command busy", now);
 }
 // The DMM panel as the instrument and the preferences have it now.
 ui::MeterProperties ApplicationController::meterProperties() const {
@@ -95,7 +95,7 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
 void ApplicationController::meterChanged(uint32_t now) {
     const auto &meter=data_.meter();
     const auto refused = [&](const char *why) { view_.notify(why, now); meterEditor_ = meterProperties(); };
-    if (meterEditor_.automatic() != (meter.latest().range==dmm::RangeMode::Auto) && !data_.setDmmAuto(meterEditor_.automatic()))
+    if (meterEditor_.automatic() != (meter.latest().range==dmm::RangeMode::Auto) && !meterCommand(data_.setDmmAuto(meterEditor_.automatic())))
         return refused("Range command busy");
     if (meterEditor_.relative() != (meter.relative().active() || meter.latest().peerRelative) && !data_.relativeMeter(meterEditor_.relative()))
         return refused("REL needs a valid current reading");

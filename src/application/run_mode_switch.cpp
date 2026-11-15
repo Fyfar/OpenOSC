@@ -12,6 +12,11 @@ RunModeSwitch::Result RunModeSwitch::change(Steps &steps, uint32_t target, Link 
     }
     const bool linked = link.attached();
     if (linked) link.detach();
+    if (!steps.prepare(target)) {
+        const bool resumed = steps.resume();
+        link.settle(steps.active());
+        return {resumed ? Outcome::Unguarded : Outcome::Disrupted, steps.active()};
+    }
     Outcome outcome = Outcome::Applied;
     if (!steps.retime(target)) {
         if (previous < RunModeCount && steps.retime(previous)) outcome = Outcome::Restored;
@@ -19,6 +24,7 @@ RunModeSwitch::Result RunModeSwitch::change(Steps &steps, uint32_t target, Link 
         else outcome = Outcome::Failed; // HSI: the users resume at its low clocks, the UI says so.
     }
     if (!steps.resume() && outcome == Outcome::Applied) outcome = Outcome::ResumeFailed;
+    steps.finished(previous, steps.active());
     link.settle(steps.active());
     return {outcome, steps.active()};
 }
@@ -32,6 +38,7 @@ const char *RunModeSwitch::describe(Outcome outcome) {
     case Outcome::Fallback: return "Clock did not lock; 200 MHz fallback";
     case Outcome::Failed: return "Clock failure: running on HSI, restart";
     case Outcome::ResumeFailed: return "Run mode applied; restart acquisition";
+    case Outcome::Unguarded: return "360 MHz not started: boot guard unavailable";
     }
     return "";
 }

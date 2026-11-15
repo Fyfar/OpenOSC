@@ -28,8 +28,20 @@ public:
     // samples their span covers (SignalSummary::frequencySpan).
     FrequencySource frequencySource() const { return source_; }
     double frequencySpan() const { return span_; }
+    // A value its basis resolves only to `uncertainty` (absolute, its unit): ScreenReadouts bounds
+    // frequency, period and duty by its column sampling. digits(): the significant digits the
+    // value then supports, its last digit no finer than the uncertainty's leading one, between
+    // MinimumDigits and MaximumDigits (MaximumDigits without a bound); approximate(): fewer than
+    // MinimumDigits would be honest, the value is shown marked ("~").
+    static constexpr unsigned MinimumDigits = 2, MaximumDigits = 3;
+    void bound(Measurement kind, double uncertainty);
+    double uncertainty(Measurement kind) const { return unsigned(kind) < Count ? bounds_[unsigned(kind)] : 0; }
+    unsigned digits(Measurement kind) const;
+    bool approximate(Measurement kind) const;
 private:
+    int supported(Measurement kind) const; // Significant digits the bound allows (MaximumDigits without one).
     double values_[Count]{};
+    float bounds_[Count]{};
     double span_ = 0;
     unsigned valid_ = 0;
     FrequencySource source_ = FrequencySource::None;

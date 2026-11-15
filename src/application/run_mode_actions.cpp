@@ -3,6 +3,7 @@
 #include "openosc/platform/power.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/board.hpp"
+#include "openosc/platform/watchdog.hpp"
 #include "openosc/usb/instrument_usb.hpp"
 
 namespace openosc {
@@ -11,10 +12,26 @@ namespace {
 // that are not data owners (backlight PWM, the USB trace sampler in trace builds).
 class ClockSteps final : public RunModeSwitch::Steps {
 public:
-    ClockSteps(DataAccess &data, ReadoutScheduler &readouts) : data_(data), readouts_(readouts) {}
+    ClockSteps(DataAccess &data, ReadoutScheduler &readouts, BootGuard *guard, BootConfirmation &confirmation)
+        : data_(data), readouts_(readouts), guard_(guard), confirmation_(confirmation) {}
     ClockSuspend suspend() override {
         readouts_.suspend(data_); // A background readout holds a frame lease; give it back first.
         return data_.suspendClockUsers();
+    }
+    // The 360 MHz profile only with its guard written ("starting"): a crash on it then comes back at
+    // 200 MHz (BootGuard). USB is already detached here.
+    bool prepare(uint32_t mode) override {
+        if (mode != OverclockedRunMode) return true;
+        const bool armed = guard_ && guard_->arm();
+        Watchdog::progress(); // A finished NOR step, written or not.
+        return armed;
+    }
+    // A deliberate change away from an unconfirmed 360 MHz: "stopped", once, still without USB. A
+    // failed write leaves "starting" (conservative). An exit from a confirmed one writes nothing.
+    void finished(uint32_t previous, uint32_t active) override {
+        if (!guard_ || !confirmation_.left(previous, active, OverclockedRunMode)) return;
+        guard_->stop();
+        Watchdog::progress();
     }
     bool retime(uint32_t mode) override {
         const bool locked = ClockControl::selectPerformance(mode);
@@ -27,6 +44,8 @@ public:
 private:
     DataAccess &data_;
     ReadoutScheduler &readouts_;
+    BootGuard *guard_;
+    BootConfirmation &confirmation_;
 };
 // The instrument USB device across a run-mode change: de-initialized (D+ released) before PLL1
 // and the AHB change; after it follows the clock that runs (InstrumentUsb::followClock) and, where
@@ -50,7 +69,7 @@ RunModeSwitch::Result ApplicationController::changeRunMode(uint32_t mode, uint32
     // Operations that time themselves or hold a file across polls finish first.
     if (autoBusy() || shots_.busy() || imageReader_.busy() || recoveryPending_ || shutdown_ != Shutdown::None)
         return {RunModeSwitch::Outcome::Refused, ClockControl::activeMode()};
-    ClockSteps steps(data_, readouts_);
+    ClockSteps steps(data_, readouts_, guard_, guardConfirmation_);
     UsbLink link(usb_);
     const auto result = RunModeSwitch::change(steps, mode, link);
     const bool runs = result.outcome == RunModeSwitch::Outcome::Applied || result.outcome == RunModeSwitch::Outcome::Unchanged ||
@@ -59,6 +78,8 @@ RunModeSwitch::Result ApplicationController::changeRunMode(uint32_t mode, uint32
         prefs_.scope.runMode = mode; // Saved to settings.json by the usual delayed save, no restart.
         changed(now);
     }
+    // Armed and now running: confirmed after its stable time, like a boot on it.
+    if (result.active == OverclockedRunMode && result.outcome != RunModeSwitch::Outcome::Unchanged && runs) guardConfirmation_.armed(now);
     readouts_.reset(data_); // Measurement caches and their timings start again.
     dataRefresh_ = true;
     return result;

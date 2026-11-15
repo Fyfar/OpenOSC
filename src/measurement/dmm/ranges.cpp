@@ -30,11 +30,24 @@ constexpr RangeInfo milliamps[] = {{"mA",3,.066},{"mA",2,.66}};
 constexpr RangeInfo resistance[] = {{"Ohm",2,660},{"kOhm",4,6600},{"kOhm",3,66000},{"kOhm",2,660000},
     {"MOhm",4,6600000},{"MOhm",3,66000000}};
 }
-struct Model { Table voltsDc, voltsAc, millivolts, amps, milliamps, resistance; };
+// An overload display that does not carry its range's decimals: the controller's own OL packet,
+// captured on the instrument, recognised as that range only while it is an overload.
+struct OverloadAlias { Function function; const char *unit; unsigned decimals, index; };
+// ZT703S: in the 25.000 MOhm range (index 5) the OL packet places the point as two decimals
+// (ff001061eb00000000000000feffff0e50ba; HIL 2026-11-15, build/reviews/quality-completion/
+// dmm-range-keys-entry.json). The other six resistance ranges' OL packets carry their own decimals.
+// No numeric reading in that range has been captured, so a non-OL MOhm/2 stays unrecognised.
+constexpr OverloadAlias zt703sOverload[] = {{Function::Resistance, "MOhm", 2, 5}};
+struct Model {
+    Table voltsDc, voltsAc, millivolts, amps, milliamps, resistance;
+    const OverloadAlias *overload; unsigned overloads;
+};
 constexpr Model Zt703s{table(zt703s::voltsDc), table(zt703s::voltsAc), table(zt703s::millivolts),
-                       table(zt703s::amps), table(zt703s::milliamps), table(zt703s::resistance)};
+                       table(zt703s::amps), table(zt703s::milliamps), table(zt703s::resistance),
+                       zt703sOverload, sizeof zt703sOverload / sizeof *zt703sOverload};
 constexpr Model Zt706s{table(zt706s::voltsDc), table(zt706s::voltsAc), table(zt706s::millivolts),
-                       table(zt706s::amps), table(zt706s::milliamps), table(zt706s::resistance)};
+                       table(zt706s::amps), table(zt706s::milliamps), table(zt706s::resistance), nullptr, 0};
+const Model &model(board::DmmCounts counts) { return counts == board::DmmCounts::Counts66000 ? Zt706s : Zt703s; }
 Table of(const Model &m, Function f) {
     switch (f) {
     case Function::VoltageDc: return m.voltsDc;
@@ -49,7 +62,7 @@ Table of(const Model &m, Function f) {
 }
 }
 const RangeInfo *Ranges::list(Function f, board::DmmCounts counts, unsigned &count) {
-    const auto t = of(counts == board::DmmCounts::Counts66000 ? Zt706s : Zt703s, f);
+    const auto t = of(model(counts), f);
     count = t.count; return t.values;
 }
 const RangeInfo *Ranges::list(Function f, unsigned &count) { return list(f, board::Current::Features.dmmCounts, count); }
@@ -65,6 +78,16 @@ const RangeInfo *Ranges::current(const Result &result, unsigned *index) {
             if (index) *index = i;
             return ranges + i;
         }
+    if (result.primary.status != DataStatus::Overload) return nullptr;
+    const auto &m = model(board::Current::Features.dmmCounts);
+    for (unsigned i = 0; i < m.overloads; ++i) {
+        const auto &alias = m.overload[i];
+        if (alias.function == Functions::identify(result) && alias.decimals == decimals && alias.index < count &&
+            !std::strcmp(result.unit, alias.unit)) {
+            if (index) *index = alias.index;
+            return ranges + alias.index;
+        }
+    }
     return nullptr;
 }
 bool Ranges::choose(Function function, double maximumSi, unsigned &index) {

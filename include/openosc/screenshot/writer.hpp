@@ -8,6 +8,9 @@ public:
     explicit ScreenshotWriter(Filesystem& fs) : fs_(fs) {}
     bool start(const uint16_t* frame);
     void service();
+    // Abandons an unfinished screenshot: the file is closed and its temporary name removed, so the
+    // final name never appears and service() writes nothing more. Nothing happens when none is open.
+    void cancel();
     bool busy() const { return open_; }
     bool succeeded() const { return complete_; }
     unsigned percent() const { return position_ * 100ULL / BmpImage::FileBytes; }

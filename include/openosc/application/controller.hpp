@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/application/meter_restore.hpp"
 #include "openosc/application/state.hpp"
 #include "openosc/application/preferences_result.hpp"
 #include "openosc/input/gestures.hpp"
@@ -23,6 +24,9 @@
 #include "openosc/ui/scope/cursor_control.hpp"
 #include "openosc/data/performance.hpp"
 #include "openosc/platform/shutdown.hpp"
+#include "openosc/application/shutdown_sequence.hpp"
+#include "openosc/application/pending_saves.hpp"
+#include "openosc/application/boot_guard.hpp"
 #include "openosc/ui/editors/confirmation.hpp"
 #include "openosc/ui/editors/property_navigator.hpp"
 #include "openosc/ui/scope/display_properties.hpp"
@@ -37,6 +41,8 @@ public:
                           ThemeStore &themes, ScreenshotWriter &shots, DataAccess &data)
         : display_(display), nor_(nor), fs_(fs), preferences_(preferences), themes_(themes), shots_(shots),
           data_(data), images_(fs),imageReader_(fs) {}
+    // The 360 MHz guard and what the boot made of it (main.cpp, before run()).
+    void bootGuard(BootGuard &guard, const BootGuard::Start &start) { guard_ = &guard; bootStart_ = start; }
     [[noreturn]] void run();
     enum class ModeChange : uint8_t { Selected, Busy, Refused };
 
@@ -106,9 +112,12 @@ private:
     power::LowBatteryPolicy lowBattery_;
     bool dimmed_=false;
     using Shutdown = ShutdownAction;
+    // The running shutdown (docs/POWER.md). shutdown_ mirrors shutdownSequence_.action() for the
+    // places that only ask whether one runs.
+    class ShutdownSteps;
+    ShutdownSequence shutdownSequence_;
     Shutdown shutdown_ = Shutdown::None;
     ShutdownAction confirmAction_ = ShutdownAction::PowerOff;
-    uint32_t shutdownAt_ = 0;
     void changed(uint32_t now);
     void store(uint32_t now);
     void applyPreferences();
@@ -184,7 +193,8 @@ private:
     // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;
     // refused, the drafts return to the view in force.
     bool applyDisplay(unsigned row, uint32_t now);
-    void applySettings(const Preferences &chosen, uint32_t now); // What a Settings choice changed.
+    // What a Settings choice changed; runModeChosen: the Run mode row itself was committed (RunModeChoice).
+    void applySettings(const Preferences &chosen, uint32_t now, bool runModeChosen = false);
     ui::TriggerEditor triggerEditor_;
     ui::FrequencyEditor frequencyEditor_;
     ui::ChannelEditor channelEditor_;
@@ -196,15 +206,17 @@ private:
     bool autoWasHeld_ = false;
     bool autoCancelled_ = false;
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
-    bool meterRestore_ = false;
+    MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
+    // An explicit DMM command (keys, SCPI): accepted, it supersedes the entry's pending restore.
+    bool meterCommand(bool accepted) { if (accepted) meterRestore_.cancel(); return accepted; }
+    // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.
+    bool meterRestorePending() const { return meterRestore_.pending(data_.measurementMode(), data_.dmmSelectionStatus()); }
     DataStatus lastSelection_ = DataStatus::NoData;
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
     plot::Focus focus_ = plot::Focus::Scale;
     plot::CursorControl cursors_;
     scope::TriggerFollow triggerFollow_;
-    bool themePending_ = false;
-    uint32_t themeAt_ = 0;
     plot::Controls plotControls_;
     void render();
     void prepareColumns();
@@ -228,8 +240,25 @@ private:
     unsigned imageProgress_=0;
     ui::SettingsMenu settingsMenu_;
     DeviceInfo settingsInfo_;
-    bool savePending_ = false;
-    uint32_t saveAt_ = 0;
+    PendingSaves saves_; // Theme/plot and settings files to write (background or once at shutdown).
+    BootGuard *guard_ = nullptr;                // Without it (tests) the 360 MHz profile is refused.
+    BootGuard::Start bootStart_{0, false, nullptr};
+    BootConfirmation guardConfirmation_;
+    bool started_ = false;                      // UI and measurement backend came up: may confirm 360.
+    void serviceBootGuard(uint32_t now);
+    bool guardStopped_ = false;                 // "stopped" written by a shutdown that may still be refused.
+    void stopBootGuard();                       // A deliberate exit from an unconfirmed 360 MHz run.
+    const char *guardNotice_ = nullptr;         // After a refused restart: what became of 360 MHz.
+    class RefusedRestartSteps;
+    // The files PendingSaves writes, as this instrument writes them (controller.cpp).
+    class SettingsStore final : public PendingSaves::Store {
+    public:
+        explicit SettingsStore(ApplicationController &a) : a_(a) {}
+        bool saveTheme() override;
+        bool savePreferences() override;
+    private:
+        ApplicationController &a_;
+    };
     static constexpr uint32_t OverlaySettleMs = 60;
     uint32_t hiddenAt_ = 0xffff0000U;
     uint32_t fpsAt_ = 0, fpsFlushes_ = 0;
