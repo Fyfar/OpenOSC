@@ -8,23 +8,11 @@ namespace openosc {
 void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     using Caps = generator::Capabilities;
     auto &output = data_.generator();
-    if (keys & (Keypad::F1 | Keypad::F3)) {
-        const bool wave = keys & Keypad::F1;
-        view_.focusParameter(wave ? 0 : 2);
-        generatorEditor_.begin(output.settings(), wave);
-        openPanel(Panel::Generator, generatorEditor_); return;
-    }
+    if (keys & (Keypad::F1 | Keypad::F3)) { openGeneratorEditor(keys & Keypad::F1); return; }
     if (keys & (Keypad::F4 | Keypad::HoldSave)) view_.focusParameter(3);
-    if (keys & (Keypad::F2 | Keypad::Menu)) {
-        frequencyEditor_.begin(prefs_.generatorMillihertz, Caps::maximumMillihertz(output.settings().shape, output.settings().level),
-                               Caps::MinimumMillihertz);
-        panel_ = Panel::Frequency;
-        view_.frequencyEditor(frequencyEditor_);
-        return;
-    }
+    if (keys & (Keypad::F2 | Keypad::Menu)) { openFrequencyEditor(); return; }
     if (keys & (Keypad::HoldSave | Keypad::F4)) {
-        if (output.enabled()) output.disable();
-        else if (!output.enable()) view_.notify("Cannot enable output", now);
+        if (!requestGeneratorOutput(!output.enabled(), now) && !output.enabled()) view_.notify("Cannot enable output", now);
     }
     auto settings = output.settings();
     uint64_t frequency = prefs_.generatorMillihertz;

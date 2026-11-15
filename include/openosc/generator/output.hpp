@@ -27,6 +27,8 @@ public:
     bool suspendForClock() { disable(); return !enabled_; }
     bool clockBusy() const { return false; }
     bool offConfirmed() const { return !enabled_; } // The DAC/PWM halted is off.
+    // Started and running: not after a halt that failed (BDMA would not stop: the state is unknown).
+    bool onConfirmed() const { return enabled_ && status_ == DataStatus::Ok; }
     bool enabled() const { return enabled_; }
     bool busy() const { return false; }
     // BDMA to the DAC shares the AHB with the GPIOD reads: at full speed requests are lost and the

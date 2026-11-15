@@ -93,6 +93,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
                       chosen.idle.powerOffMinutes != prefs_.idle.powerOffMinutes;
     prefs_.brightness = chosen.brightness; prefs_.showFps = chosen.showFps; prefs_.batteryDisplay = chosen.batteryDisplay;
     prefs_.idle = chosen.idle;
+    prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();
     changed(now);

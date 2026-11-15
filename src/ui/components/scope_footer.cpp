@@ -171,8 +171,9 @@ void ScopeFooter::readoutPanel(unsigned c) {
         panels_[c].add(placed[k].x, parts.tag, light(theme_->background) ? value : mix(value, theme_->background, Tag), parts.size);
         panels_[c].add(placed[k].x + parts.tagWidth, parts.value, value, parts.size);
     }
-    // Full: the bottom rail lit as far as the pass has come (whole when done).
-    if (indicator_.full && model_ && enabled(c)) panels_[c].rail(Layout::rail(int(c)).width * indicator_.percent / 100, color);
+    // Full: the bottom rail, whole (a first pass: as far as it has come); grey with stale values.
+    if (indicator_.full && model_ && enabled(c))
+        panels_[c].rail(Layout::rail(int(c)).width * indicator_.percent / 100, indicator_.stale ? theme_->muted : color);
 }
 const char *ScopeFooter::samples(const plot::Model &model, unsigned channel) {
     const auto &options = model.options();

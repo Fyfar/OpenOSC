@@ -1,13 +1,88 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/generator/capabilities.hpp"
+#include "openosc/generator/frequency.hpp"
+#include "openosc/platform/input.hpp"
 
 namespace openosc {
 // A committed WAVEFORM/PARAMETERS field: shape, frequency, level, codes and amplitude as the
 // editor normalised them, together; refused, the editor shows the generator in force. The output
-// switch stays its own action.
+// switch stays its own action. F1/F2/F3 go to the other panels (switchGeneratorPanel).
 void ApplicationController::generatorEditorKeys(uint32_t keys, uint32_t now) {
+    generatorPanelKeys(keys, now);
+    showGeneratorKeys();
+}
+void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
+    if (switchGeneratorPanel(keys, now)) return;
     if (fieldKeys(keys, generatorEditor_, now) != FieldKey::Committed) return;
     if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify("Unsupported waveform/frequency/duty", now);
     generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave());
     view_.properties(generatorEditor_, navigator_);
+}
+// F1 Wave, F2 Frequency (Unit in FREQUENCY), F3 Params, F4 Back or Cancel: the cards say what the keys
+// do in the panel open now; closed, the screen's own cards with the output as it is.
+void ApplicationController::showGeneratorKeys() {
+    if (state_.mode != MeasurementMode::Generator) return;
+    using Keys = ui::GeneratorKeys::Panel;
+    ui::GeneratorKeys keys;
+    if (panel_ == Panel::Frequency) keys = {Keys::Frequency, true, frequencyEditor_.unit()};
+    else if (panel_ == Panel::Generator)
+        keys = {generatorEditor_.wave() ? Keys::Wave : Keys::Params, navigator_.mode() != ui::PropertyNavigator::Mode::Browse, nullptr};
+    view_.generatorKeys(keys);
+}
+void ApplicationController::openGeneratorEditor(bool wave) {
+    view_.focusParameter(wave ? 0 : 2);
+    generatorEditor_.begin(data_.generator().settings(), wave);
+    openPanel(Panel::Generator, generatorEditor_);
+    showGeneratorKeys();
+}
+void ApplicationController::openFrequencyEditor() {
+    using Caps = generator::Capabilities;
+    const auto &settings = data_.generator().settings();
+    view_.focusParameter(1);
+    frequencyEditor_.begin(generator::Frequency::millihertz(settings.frequencyHz), Caps::maximumMillihertz(settings.shape, settings.level),
+                           Caps::MinimumMillihertz);
+    panel_ = Panel::Frequency;
+    view_.frequencyEditor(frequencyEditor_);
+    showGeneratorKeys();
+}
+// The field in progress is applied as on leaving it (MENU): a number's draft, the option a list
+// shows, the frequency being edited. Refused, nothing changes, the draft stays on show and the panel
+// stays open with a notice: nothing is dropped or applied silently.
+bool ApplicationController::finishGeneratorField(uint32_t now) {
+    if (panel_ == Panel::Frequency) {
+        auto settings = data_.generator().settings();
+        const auto frequency = generator::Frequency::rational(frequencyEditor_.value());
+        if (generator::Frequency::millihertz(frequency) == generator::Frequency::millihertz(settings.frequencyHz)) return true;
+        settings.frequencyHz = frequency;
+        if (applyGenerator(settings, now)) return true;
+        view_.notify("Not applied: unsupported output frequency", now);
+        view_.frequencyEditor(frequencyEditor_);
+        return false;
+    }
+    // The field still open is finished on copies: only an accepted result changes anything. Refused,
+    // the panel keeps its list, its open field (Choice cursor or Number draft, F4 still cancels it)
+    // and draft exactly as they were, so the same switch can be tried again.
+    auto editor = generatorEditor_;
+    auto navigator = navigator_;
+    if (navigator.mode() != ui::PropertyNavigator::Mode::Browse &&
+        navigator.keys(Keypad::Menu, editor) == ui::PropertyNavigator::Outcome::Refused) {
+        view_.notify(editor.notice() ? editor.notice() : "Not applied", now);
+        return false;
+    }
+    if (editor.settings().same(data_.generator().settings()) || applyGenerator(editor.settings(), now)) return true;
+    view_.notify("Not applied: unsupported waveform/frequency/duty", now);
+    return false;
+}
+bool ApplicationController::switchGeneratorPanel(uint32_t keys, uint32_t now) {
+    // In FREQUENCY, F2 is its unit key (Hz/kHz/MHz): only F1 and F3 leave it.
+    const uint32_t switches = keys & (Keypad::F1 | Keypad::F3 | (panel_ == Panel::Frequency ? 0U : uint32_t(Keypad::F2)));
+    if (!switches) return false;
+    const bool frequency = switches & Keypad::F2, wave = !frequency && (switches & Keypad::F1);
+    const bool there = frequency ? panel_ == Panel::Frequency
+                                 : panel_ == Panel::Generator && generatorEditor_.wave() == wave;
+    if (there || !finishGeneratorField(now)) return true; // Already there, or refused: stays.
+    if (frequency) openFrequencyEditor();
+    else openGeneratorEditor(wave);
+    return true;
 }
 } // namespace openosc

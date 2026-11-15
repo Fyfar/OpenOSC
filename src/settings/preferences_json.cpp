@@ -10,6 +10,10 @@ constexpr size_t DocumentBytes = JSON_OBJECT_SIZE(PreferencesJson::DocumentSlots
 constexpr const char *generatorShapes[] = {"sine",      "square",        "triangle",
                                            "half_sine", "positive_sine", "sawtooth"};
 constexpr const char *generatorLevels[] = {"dedicated","low","high","custom"};
+// A Dedicated square's drive (generator::SquareDrive); absent in older files: factory.
+constexpr const char *generatorDrives[] = {"factory","pwm"};
+// Startup output (GeneratorStartup); absent in older files: off.
+constexpr const char *generatorStartups[] = {"off","restore"};
 constexpr const char *batteryDisplays[] = {"icon","volts","percent"};
 template<class T> bool number(JsonObjectConst object, const char *key, T &value) {
     if (!object.containsKey(key))
@@ -115,6 +119,24 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (index==4) return false;
         candidate.generatorLevel=index;
     }
+    if (generator.containsKey("square_drive")) {
+        if (!generator["square_drive"].is<const char *>()) return false;
+        unsigned index=0;
+        while (index<2 && std::strcmp(generator["square_drive"],generatorDrives[index])) ++index;
+        if (index==2) return false;
+        candidate.generatorSquareDrive=index;
+    }
+    if (generator.containsKey("startup_output")) {
+        if (!generator["startup_output"].is<const char *>()) return false;
+        unsigned index=0;
+        while (index<2 && std::strcmp(generator["startup_output"],generatorStartups[index])) ++index;
+        if (index==2) return false;
+        candidate.generatorStartup=index;
+    }
+    if (generator.containsKey("last_output")) {
+        if (!generator["last_output"].is<bool>()) return false;
+        candidate.generatorLastOutput=generator["last_output"].as<bool>();
+    }
     if (generator.containsKey("shape")) {
         if (!generator["shape"].is<const char *>())
             return false;
@@ -154,6 +176,9 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["generator"]["duty_permille"] = values.generatorDutyPermille;
     document["generator"]["amplitude_mv"] = values.generatorAmplitudeMillivolts;
     document["generator"]["level"] = generatorLevels[values.generatorLevel];
+    document["generator"]["square_drive"] = generatorDrives[values.generatorSquareDrive];
+    document["generator"]["startup_output"] = generatorStartups[values.generatorStartup];
+    document["generator"]["last_output"] = bool(values.generatorLastOutput);
     document["generator"]["minimum_code"] = values.generatorMinimumCode;
     document["generator"]["maximum_code"] = values.generatorMaximumCode;
     if (document.overflowed()) return 0;

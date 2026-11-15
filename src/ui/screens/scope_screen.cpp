@@ -38,11 +38,14 @@ void ScopeScreen::context(unsigned channel, plot::Focus focus) {
     focus_ = focus;
     cards();
 }
-void ScopeScreen::generator(const generator::Snapshot &output) {
-    char text[48] = "", frequency[24];
+// The generator running beside the capture; while its DAC stream loads the bus, ", ADC max /2": the
+// next captures' maximum sample rate is halved (a held record stays as it was captured).
+void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved) {
+    char text[64] = "", frequency[24];
     if (output.enabled && output.applied.actualHz.valid() && plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3)) {
         const unsigned shape = unsigned(output.requested.shape);
-        std::snprintf(text, sizeof text, "GEN %s %s", shape < 6 ? generator::ShapeNames[shape] : "?", frequency);
+        std::snprintf(text, sizeof text, "GEN %s %s%s", shape < 6 ? generator::ShapeNames[shape] : "?", frequency,
+                      captureHalved ? ", ADC max /2" : "");
     }
     host_.waveform().note(text, host_.theme().generator);
 }

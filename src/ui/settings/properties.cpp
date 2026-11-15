@@ -30,7 +30,8 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::Brightness: return PropertyKind::Number;
     case Action::ShowFps: return PropertyKind::Toggle;
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
-    case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout: return PropertyKind::Choice;
+    case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
+    case Action::GeneratorStartup: return PropertyKind::Choice;
     default: return PropertyKind::Action;
     }
 }
@@ -47,6 +48,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightTimeout: return BacklightCount;
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
+    case Action::GeneratorStartup: return 2;
     default: return 0;
     }
 }
@@ -60,6 +62,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::BacklightTimeout: return indexOf(prefs_.idle.backlightSeconds, Backlight);
     case Action::BacklightIdleLevel: return indexOf(prefs_.idle.dimPercent, IdleSettings::DimLevels);
     case Action::PowerOffTimeout: return indexOf(prefs_.idle.powerOffMinutes, IdleSettings::OffChoices); // An old value: none.
+    case Action::GeneratorStartup: return prefs_.generatorStartup;
     default: return 0;
     }
 }
@@ -85,6 +88,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         else std::snprintf(output, capacity, "Off");
         break;
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
+    case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
     default: PropertyList::optionName(row, index, output, capacity); break;
     }
 }
@@ -103,6 +107,10 @@ void SettingsProperties::value(unsigned row, char *output, size_t capacity) cons
     case Action::PowerOffTimeout:
         if (option(row) < OffCount) optionName(row, option(row), output, capacity);
         else std::snprintf(output, capacity, "%lu min (old)", (unsigned long)prefs_.idle.powerOffMinutes);
+        break;
+    case Action::GeneratorStartup: // The choice, and with Restore last what the next boot does.
+        if (prefs_.generatorStartup) std::snprintf(output, capacity, "Restore last (%s)", prefs_.generatorLastOutput ? "ON" : "OFF");
+        else std::snprintf(output, capacity, "Off");
         break;
     case Action::BufferSize: case Action::BacklightTimeout: case Action::BacklightIdleLevel:
         if (option(row) < options(row)) optionName(row, option(row), output, capacity);
@@ -126,6 +134,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::BacklightTimeout: prefs_.idle.backlightSeconds = Backlight[index]; break;
     case Action::BacklightIdleLevel: prefs_.idle.dimPercent = IdleSettings::DimLevels[index]; break;
     case Action::PowerOffTimeout: prefs_.idle.powerOffMinutes = IdleSettings::OffChoices[index]; break;
+    case Action::GeneratorStartup: prefs_.generatorStartup = index; break;
     default: return false;
     }
     return true;

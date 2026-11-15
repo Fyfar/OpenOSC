@@ -9,10 +9,14 @@ namespace {
 using Caps = generator::Capabilities;
 using Row = GeneratorEditor::Row;
 constexpr Row WaveRows[] = {Row::Shape, Row::Duty, Caps::Levels ? Row::Level : Row::Amplitude, Row::Frequency};
-constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency};
+constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::Drive, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency};
 constexpr Row ModuleParameters[] = {Row::Duty, Row::Amplitude, Row::Preset, Row::Frequency};
-constexpr uint32_t Presets[] = {10, 50, 100, 500, 1000, 2000, 5000};
-constexpr unsigned PresetCount = sizeof Presets / sizeof *Presets;
+constexpr auto Presets = GeneratorEditor::Presets;
+constexpr unsigned PresetCount = GeneratorEditor::PresetCount;
+// The reference has a place only where main OUTPUT had one: the ZT703S DAC/PWM jack.
+constexpr unsigned PresetOptions = PresetCount + (Caps::Levels ? 1 : 0);
+// Only a Dedicated square has a drive to choose; elsewhere the row tells the path in use.
+bool drives(const generator::Settings &s) { return s.shape == generator::Shape::Square && s.level == generator::Level::Dedicated; }
 }
 unsigned GeneratorEditor::count() const {
     if (wave_) return sizeof WaveRows / sizeof *WaveRows;
@@ -25,6 +29,7 @@ GeneratorEditor::Row GeneratorEditor::row(unsigned index) const {
 PropertyKind GeneratorEditor::kind(unsigned index) const {
     switch (row(index)) {
     case Row::Shape: case Row::Level: case Row::Preset: return PropertyKind::Choice;
+    case Row::Drive: return drives(draft_.settings) ? PropertyKind::Choice : PropertyKind::Info;
     case Row::Duty: return Caps::duty(draft_.settings.shape) ? PropertyKind::Number : PropertyKind::Info;
     case Row::Amplitude: case Row::MinimumCode: case Row::MaximumCode: return PropertyKind::Number;
     case Row::Frequency: return PropertyKind::Info; // Set in the frequency editor.
@@ -32,14 +37,15 @@ PropertyKind GeneratorEditor::kind(unsigned index) const {
     return PropertyKind::Info;
 }
 void GeneratorEditor::name(unsigned index, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency"};
+    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency", "Square out"};
     std::snprintf(output, capacity, "%s", names[unsigned(row(index))]);
 }
 unsigned GeneratorEditor::options(unsigned index) const {
     switch (row(index)) {
     case Row::Shape: return 6;
     case Row::Level: return 4;
-    case Row::Preset: return PresetCount;
+    case Row::Preset: return PresetOptions;
+    case Row::Drive: return drives(draft_.settings) ? 2 : 0;
     default: return 0;
     }
 }
@@ -47,9 +53,10 @@ unsigned GeneratorEditor::option(unsigned index) const {
     switch (row(index)) {
     case Row::Shape: return unsigned(draft_.settings.shape);
     case Row::Level: return unsigned(draft_.settings.level);
+    case Row::Drive: return unsigned(draft_.settings.squareDrive);
     case Row::Preset: // A frequency off the presets is none of them until one is chosen.
         for (unsigned i = 0; i < PresetCount; ++i) if (draft_.settings.frequencyHz.value() == Presets[i]) return i;
-        return PresetCount;
+        return PresetOptions;
     default: return 0;
     }
 }
@@ -57,7 +64,11 @@ void GeneratorEditor::optionName(unsigned index, unsigned option, char *output, 
     switch (row(index)) {
     case Row::Shape: std::snprintf(output, capacity, "%s", generator::ShapeNames[option % 6]); break;
     case Row::Level: std::snprintf(output, capacity, "%s", generator::Levels::Names[option % 4]); break;
-    case Row::Preset: plot::Format::quantity(Presets[option % PresetCount], "Hz", output, capacity); break;
+    case Row::Drive: std::snprintf(output, capacity, "%s", option ? "PWM always" : "Factory: DAC <1kHz"); break;
+    case Row::Preset:
+        if (option == Reference) std::snprintf(output, capacity, "Reference 1kHz");
+        else plot::Format::quantity(Presets[option % PresetCount], "Hz", output, capacity);
+        break;
     default: if (capacity) output[0] = 0; break;
     }
 }
@@ -76,7 +87,14 @@ bool GeneratorEditor::choose(unsigned index, unsigned option) {
     switch (row(index)) {
     case Row::Shape: draft_.settings.shape = generator::Shape(option); break;
     case Row::Level: draft_.settings.level = generator::Level(option); break;
-    case Row::Preset: draft_.settings.frequencyHz = {Presets[option], 1}; break;
+    case Row::Drive: draft_.settings.squareDrive = generator::SquareDrive(option); break;
+    case Row::Preset:
+        if (option == Reference) { // main OUTPUT selector 0: TIM13 1 kHz, compare 500 of 1000.
+            draft_.settings.shape = generator::Shape::Square; draft_.settings.level = generator::Level::Dedicated;
+            draft_.settings.dutyPermille = 500;
+            draft_.settings.frequencyHz = {1000, 1};
+        } else draft_.settings.frequencyHz = {Presets[option], 1};
+        break;
     default: return false;
     }
     limit();
@@ -137,6 +155,12 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
         return;
     case Row::Preset:
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", output, capacity);
+        return;
+    case Row::Drive: // The choice, then the path it gives at this frequency (or the path of any other output).
+        if (drives(draft_.settings))
+            std::snprintf(output, capacity, "%s, now %s", generator::Levels::DriveNames[unsigned(draft_.settings.squareDrive) & 1],
+                          generator::Levels::pwm(draft_.settings) ? "PWM" : "DAC");
+        else std::snprintf(output, capacity, "%s", generator::Levels::pwm(draft_.settings) ? "PWM" : "DAC");
         return;
     case Row::Frequency:
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", requested, sizeof requested);

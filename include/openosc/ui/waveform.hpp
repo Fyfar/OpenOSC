@@ -31,6 +31,7 @@ public:
     void cursorFocus(plot::CursorLine line);
     // A one-line note in the top right corner of the plot; empty hides it.
     void note(const char *text, uint32_t color);
+    const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
     bool captureReference(unsigned channel);
     void clearReference();

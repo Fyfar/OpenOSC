@@ -7,7 +7,10 @@ namespace openosc::ui {
 // (generator::Capabilities): ZT703S levels and DAC codes, ZT706S module amplitude in volts.
 class GeneratorEditor final : public PropertyList {
 public:
-    enum class Row : uint8_t { Shape, Duty, Level, Amplitude, MinimumCode, MaximumCode, Preset, Frequency };
+    enum class Row : uint8_t { Shape, Duty, Level, Amplitude, MinimumCode, MaximumCode, Preset, Frequency, Drive };
+    // ZT703S presets: main OUTPUT's frequencies, then its reference (TIM13 1 kHz square, 50 %).
+    static constexpr uint32_t Presets[] = {10, 50, 100, 500, 1000, 2000, 5000};
+    static constexpr unsigned PresetCount = sizeof Presets / sizeof *Presets, Reference = PresetCount;
     void begin(const generator::Settings &settings, bool wave) {
         draft_ = {settings, false, false}; wave_ = wave;
     }

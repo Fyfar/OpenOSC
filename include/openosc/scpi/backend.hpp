@@ -54,6 +54,9 @@ public:
     virtual generator::Snapshot generator() const = 0;
     virtual bool configureGenerator(const generator::Settings &) = 0;
     virtual bool output(bool enabled) = 0;
+    // Startup output (GeneratorStartup): true restores the last confirmed output at boot, false off.
+    virtual bool generatorStartup() const = 0;
+    virtual bool generatorStartup(bool restore) = 0;
     virtual bool remote() const = 0;
     virtual bool remote(bool enabled) = 0;
     virtual bool performance(PerformanceSnapshot &) const { return false; }

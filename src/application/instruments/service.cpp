@@ -3,6 +3,7 @@
 
 namespace openosc {
 void ApplicationController::serviceInstruments(uint32_t now) {
+    followGeneratorOutput(now); // Startup output: a user's ON/OFF once confirmed.
     const auto selection = data_.dmmCommandStatus();
     const bool visible = uiReady_;
     if (serialWatched_ && !data_.meterSerial().enabled()) {

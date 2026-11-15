@@ -19,6 +19,10 @@ struct Preferences {
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
+    uint32_t generatorSquareDrive = 0; // generator::SquareDrive (ZT703S Dedicated square): 0 factory, 1 PWM.
+    // Startup output (GeneratorStartup): 0 off after power-up, 1 restore the last confirmed state;
+    // generatorLastOutput is that state (1 on).
+    uint32_t generatorStartup = 0, generatorLastOutput = 0;
     uint32_t generatorAmplitudeMillivolts = 3000; // ZT706S module; ZT703S keeps level/codes.
     ScopePreferences scope;
     MeterPreferences meter;
@@ -34,7 +38,8 @@ struct Preferences {
                generatorDutyPermille >= generator::Capabilities::MinimumDutyPermille &&
                generatorDutyPermille <= generator::Capabilities::MaximumDutyPermille &&
                generatorAmplitudeMillivolts <= generator::Capabilities::amplitudeLimitMillivolts(generator::Shape(generatorShape), generatorMillihertz) &&
-               generatorLevel<4 && generatorMinimumCode<=generatorMaximumCode &&
+               (!generator::Capabilities::AmplitudeStepMillivolts || !(generatorAmplitudeMillivolts % (generator::Capabilities::AmplitudeStepMillivolts ? generator::Capabilities::AmplitudeStepMillivolts : 1))) &&
+               generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorMinimumCode<=generatorMaximumCode &&
                generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() &&
                scope::SamplePlan::calculate(timebaseNs,
                     scope::RecordBudget::perChannel(scope.recordPoints,scope::RecordBudget::channels(scope.enabled[0],scope.enabled[1])),

@@ -50,6 +50,7 @@ constexpr SettingsEntry power[] = {
     {"Backlight timeout",Action::BacklightTimeout},
     {"Idle backlight",Action::BacklightIdleLevel},
     {"Auto power off",Action::PowerOffTimeout},
+    {"Generator at startup",Action::GeneratorStartup},
     {"Back",Action::Back},
 };
 constexpr SettingsEntry calibration[] = {

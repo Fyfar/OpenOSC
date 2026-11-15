@@ -63,8 +63,13 @@ void ApplicationController::triggerSource(uint32_t now) {
     dataRefresh_ = true;
 }
 void ApplicationController::frequencyKeys(uint32_t keys, uint32_t now) {
+    frequencyPanelKeys(keys, now);
+    showGeneratorKeys(); // Unit on F2, Cancel on F4; closed: the screen's own cards.
+}
+void ApplicationController::frequencyPanelKeys(uint32_t keys, uint32_t now) {
     if (!keys) return;
     if (keys & Keypad::F4) { closePanel(); return; }
+    if (switchGeneratorPanel(keys, now)) return; // F1 WAVEFORM, F3 PARAMETERS; F2 stays the unit key.
     if (keys & Keypad::Left) frequencyEditor_.move(-1);
     if (keys & Keypad::Right) frequencyEditor_.move(1);
     if (keys & Keypad::Up) frequencyEditor_.adjust(1);

@@ -1,5 +1,7 @@
 #include "openosc/ui/components/generator_preview.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/generator/capabilities.hpp"
+#include <cstring>
 
 namespace openosc::ui {
 lv_obj_t *GeneratorPreview::create(lv_obj_t *parent) {
@@ -11,8 +13,11 @@ lv_obj_t *GeneratorPreview::create(lv_obj_t *parent) {
     return object_;
 }
 void GeneratorPreview::update(const generator::Settings &settings, uint32_t color) {
-    if (valid_ && shape_ == settings.shape && duty_ == settings.dutyPermille && color_ == color)
+    char level[sizeof level_];
+    generator::LevelText::describe(settings, level, sizeof level);
+    if (valid_ && shape_ == settings.shape && duty_ == settings.dutyPermille && color_ == color && !std::strcmp(level, level_))
         return;
+    std::memcpy(level_, level, sizeof level_);
     auto preview = settings;
     preview.level=generator::Level::Custom;
     preview.minimumCode = 0;
@@ -39,7 +44,7 @@ void GeneratorPreview::draw(lv_event_t *event) {
     if (height>=50) lv_draw_label(lv_event_get_layer(event), &label, &caption);
     const bool footer = height >= 60;
     if (footer) {
-        label.text = "Level: uncalibrated";
+        label.text = self.level_; // What sets the level (no calibrated amplitude exists).
         label.color = lv_color_hex(0x94a3b8);
         lv_area_t areaFooter = {area.x1, area.y2 - 14, area.x2, area.y2};
         lv_draw_label(lv_event_get_layer(event), &label, &areaFooter);

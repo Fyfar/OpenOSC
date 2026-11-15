@@ -38,6 +38,8 @@ public:
     generator::Snapshot generator() const override;
     bool configureGenerator(const generator::Settings &) override;
     bool output(bool) override;
+    bool generatorStartup() const override;
+    bool generatorStartup(bool restore) override;
     bool remote() const override;
     bool remote(bool) override;
     bool performance(PerformanceSnapshot &) const override;

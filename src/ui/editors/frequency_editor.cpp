@@ -1,6 +1,5 @@
 #include "openosc/ui/editors/frequency_editor.hpp"
 #include <algorithm>
-#include <cinttypes>
 #include <cstdio>
 
 namespace openosc::ui {
@@ -25,9 +24,14 @@ void FrequencyEditor::adjust(int direction) {
     const int64_t next = int64_t(value_) + int64_t(step()) * (direction > 0 ? 1 : -1);
     value_ = uint64_t(std::clamp<int64_t>(next, int64_t(minimum_), int64_t(maximum_)));
 }
+// The firmware's printf (newlib-nano) has no 64-bit conversions ("%llu" printed "lu"), so both parts
+// go as 32-bit unsigned long: value_ <= 1e10 mHz (begin), so the whole part is at most 1e7 (Hz), 1e4
+// (kHz) or 10 (MHz) and the fraction below the scale, 1e9 at most: each below 2^32.
 void FrequencyEditor::text(char *output, size_t capacity) const {
     uint64_t scale = 1000;
     for (unsigned i = 0; i < unit_; ++i) scale *= 1000;
-    std::snprintf(output, capacity, "%0*" PRIu64 ".%0*" PRIu64, int(integerDigits()), value_ / scale, int(3 + unit_ * 3), value_ % scale);
+    static_assert(10000000000ULL / 1000 < (1ULL << 32) && 1000000000ULL < (1ULL << 32), "Both parts fit 32 bits");
+    std::snprintf(output, capacity, "%0*lu.%0*lu", int(integerDigits()), static_cast<unsigned long>(value_ / scale), int(3 + unit_ * 3),
+                  static_cast<unsigned long>(value_ % scale));
 }
 } // namespace openosc::ui

@@ -25,6 +25,7 @@ namespace openosc {
     battery_.initialize();
     const bool backend = data_.initialize(state_.mode);
     const auto applied = applyDataPreferences();
+    restoreStartupOutput(applied); // After the saved settings were applied; never with refused ones.
     InstrumentBackend tmcBackend(*this), serialBackend(*this);
     scpi::Engine tmcEngine(tmcBackend), serialEngine(serialBackend);
     InstrumentUsb usb(tmcEngine,serialEngine); usb_ = &usb;
@@ -277,6 +278,7 @@ bool ApplicationController::SettingsStore::savePreferences() {
 // saves wait until no host is present (STORE-02). A running shutdown or Recovery handoff saves once
 // itself (ShutdownSequence), so the background save stays out of its way (PendingSaves).
 void ApplicationController::store(uint32_t now) {
+    followGeneratorOutput(now); // A confirmed OUTP ON just before a save is in it.
     SettingsStore files(*this);
     const uint32_t outcome = saves_.service(now, shutdownSequence_, recoveryPending_, usb_ && usb_->hostActive(now),
                                             data_.scopeHoldPending(), files);

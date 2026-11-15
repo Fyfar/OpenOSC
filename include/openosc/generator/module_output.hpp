@@ -38,6 +38,7 @@ public:
     Applied applied() const { return applied_; }
     unsigned recoveryRounds() const { return recovery_.rounds(); }
     bool offConfirmed() const { return !busy() && applied_ == Applied::Off; }
+    bool onConfirmed() const { return !busy() && applied_ == Applied::On; } // Acknowledged by the module.
     DataStatus status() const { return portFailed_ ? DataStatus::HardwareError : link_.status(); }
     const Settings &settings() const { return settings_; }
     const OutputPlan &plan() const { return plan_; }

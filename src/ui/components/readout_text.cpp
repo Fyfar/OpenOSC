@@ -42,7 +42,9 @@ ReadoutIndicator ReadoutIndicator::of(scope::ReadoutBasis basis, const ReadoutSt
     ReadoutIndicator indicator;
     if (basis != scope::ReadoutBasis::Record) return indicator;
     indicator.full = true;
-    indicator.percent = state.running ? uint8_t(state.percent < 99 ? state.percent : 99) : 100; // A running pass is not done.
+    // A first pass shows how far it has come (never done while running); older values stay whole.
+    const bool first = state.running && !state.older;
+    indicator.percent = first ? uint8_t(state.percent < 99 ? state.percent : 99) : 100;
     indicator.stale = state.older && state.ageMs >= StaleMs;
     return indicator;
 }

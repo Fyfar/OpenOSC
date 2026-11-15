@@ -39,6 +39,7 @@ void InstrumentState::capture(const ScopeRequest &r, Preferences &p) {
 void InstrumentState::capture(const generator::Settings &actual, Preferences &prefs_) {
     prefs_.generatorShape = unsigned(actual.shape);
     prefs_.generatorLevel = unsigned(actual.level);
+    prefs_.generatorSquareDrive = unsigned(actual.squareDrive);
     prefs_.generatorMinimumCode = actual.minimumCode;
     prefs_.generatorMaximumCode = actual.maximumCode;
     prefs_.generatorMillihertz = generator::Frequency::millihertz(actual.frequencyHz);
@@ -49,6 +50,7 @@ generator::Settings InstrumentState::generator(const Preferences &p) {
     generator::Settings result;
     result.shape = generator::Shape(p.generatorShape);
     result.level = generator::Level(p.generatorLevel);
+    result.squareDrive = generator::SquareDrive(p.generatorSquareDrive);
     result.minimumCode = p.generatorMinimumCode;
     result.maximumCode = p.generatorMaximumCode;
     result.frequencyHz = generator::Frequency::rational(p.generatorMillihertz);

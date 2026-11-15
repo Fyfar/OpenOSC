@@ -50,7 +50,12 @@ public:
     bool screenshotBusy() override { return a_.shots_.busy(); }
     void cancelScreenshot() override { a_.shots_.cancel(); }
     bool saveTheme() override { SettingsStore files(a_); return a_.saves_.flushTheme(files); }
-    bool savePreferences() override { SettingsStore files(a_); return a_.saves_.flushSettings(files); }
+    // The user's last confirmed output first (a confirmed OUTP ON in the same batch); the stop that follows
+    // (stopInstruments) is the instrument's own and changes nothing kept.
+    bool savePreferences() override {
+        a_.followGeneratorOutput(Board::milliseconds());
+        SettingsStore files(a_); return a_.saves_.flushSettings(files);
+    }
     // USB first: the unconfirmed 360 MHz guard's "stopped" (one attempt) is written without a host, while
     // the volume is still mounted (BootGuard).
     void stopInstruments() override { if (a_.usb_) a_.usb_->stop(); a_.stopBootGuard(); a_.data_.beginShutdown(); }

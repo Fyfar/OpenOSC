@@ -1,6 +1,8 @@
 #include "openosc/generator/module_wave.hpp"
 #include "openosc/generator/frequency.hpp"
 #include <cmath>
+#include <cstdlib>
+#include <initializer_list>
 
 // float32 steps as the factory's FPU code (no fused multiply-add: its rounding differs).
 #define OPENOSC_FACTORY_FLOAT __attribute__((optimize("fp-contract=off")))
@@ -64,55 +66,65 @@ OPENOSC_FACTORY_FLOAT uint16_t ModuleWave::code(float volts, float correction) {
     else if (correction == 0.0f) result = uint16_t(result - 57); // 5 V: 198. (0 V wraps: build() never asks.)
     return result > 255 ? 255 : result;
 }
-OPENOSC_FACTORY_FLOAT ModuleWave::Timing ModuleWave::timing(uint64_t millihertz, unsigned start, bool even) {
+namespace {
+// |ClockHz/(count*divisor) - millihertz/1000| as numerator/denominator, both exact. With a floor or
+// ceil divisor the numerator is at most millihertz*count and the denominator 1000*count*divisor at
+// most 1000*(ClockHz*1000/millihertz + count): the cross products stay below 7.1e17 in 64 bits.
+struct Error {
+    uint64_t numerator, denominator;
+    bool below(const Error &b) const { return numerator * b.denominator < b.numerator * denominator; }
+    bool same(const Error &b) const { return numerator * b.denominator == b.numerator * denominator; }
+};
+Error error(uint64_t millihertz, unsigned count, uint64_t divisor) {
+    const uint64_t clock = uint64_t(ModuleWave::ClockHz) * 1000, played = millihertz * count * divisor;
+    return {clock > played ? clock - played : played - clock, uint64_t(1000) * count * divisor};
+}
+// At equal frequency, the better shape: the square's duty nearer (|high/count - duty/100|, compared
+// exactly), a sine family's count with samples on its peaks, then more samples.
+bool finer(Shape shape, unsigned duty, unsigned a, unsigned b) {
+    if (shape == Shape::Square) {
+        const uint64_t ea = uint64_t(std::abs(int(1000 * ModuleWave::highSamples(a, duty)) - int(duty * a))) * b,
+                       eb = uint64_t(std::abs(int(1000 * ModuleWave::highSamples(b, duty)) - int(duty * b))) * a;
+        if (ea != eb) return ea < eb;
+    }
+    const unsigned peaks = shape == Shape::Sine || shape == Shape::HalfSine ? 4 : shape == Shape::PositiveSine ? 2 : 1;
+    if (!(a % peaks) != !(b % peaks)) return !(a % peaks);
+    return a > b;
+}
+} // namespace
+ModuleWave::Timing ModuleWave::timing(uint64_t millihertz, Shape shape, unsigned duty) {
     Timing best;
-    if (!millihertz) return best;
-    if (start > MaximumSamples) start = MaximumSamples;
-    if (start < MinimumSamples) start = MinimumSamples;
-    const float target = f32(double(millihertz) / 1000.0);
-    float bestError = float(0xffffff);
-    for (unsigned count = start; count >= MinimumSamples; --count) {
-        if (even && (count & 1)) continue;
-        // floor(floor(ClockHz / N) / Hz) of the factory, for a target in millihertz.
-        uint64_t divisor = uint64_t(ClockHz) * 1000 / (uint64_t(count) * millihertz);
-        if (!divisor) divisor = 1;
-        if (divisor > 0xffffffffU) divisor = 0xffffffffU;
-        const float actual = (float(ClockHz) / float(count)) / float(uint32_t(divisor));
-        if (actual == target && !(count & 3)) return {uint32_t(divisor), count};
-        const float error = std::fabs(actual - target);
-        if (error < bestError) {
-            bestError = float(unsignedOf(error)); // The factory keeps it as an integer.
-            best = {uint32_t(divisor), count};
+    if (!millihertz || millihertz > uint64_t(ClockHz) * 1000) return best;
+    Error bestError{0, 1};
+    for (unsigned count = MinimumSamples; count <= MaximumSamples; ++count) {
+        if (shape == Shape::Triangle && (count & 1)) continue;
+        if (shape == Shape::Square && !holds(count, duty)) continue;
+        const uint64_t floor = uint64_t(ClockHz) * 1000 / (millihertz * count);
+        for (const uint64_t divisor : {floor, floor + 1}) {
+            if (!divisor || divisor > 0xffffffffULL) continue;
+            const Error e = error(millihertz, count, divisor);
+            if (!best.count || e.below(bestError) || (e.same(bestError) && finer(shape, duty, count, best.count))) {
+                best = {uint32_t(divisor), count}; bestError = e;
+            }
         }
-        if (millihertz < 500000000ULL && count < 100) break;
     }
     return best;
 }
-OPENOSC_FACTORY_FLOAT void ModuleWave::samples(Shape shape, unsigned count, uint16_t code, unsigned duty, uint8_t *output) {
-    double phase = 0;
-    float value = 0;
-    const unsigned half = code >> 1;
+void ModuleWave::samples(Shape shape, unsigned count, uint16_t code, unsigned duty, uint8_t *output) {
+    constexpr double pi = 3.14159265358979323846;
+    const unsigned high = highSamples(count, duty);
     for (unsigned i = 0; i < count; ++i) {
-        double sample = 0;
+        double value = 0;
         switch (shape) {
-        case Shape::Sine:
-            sample = double(half) + double(half) * std::sin(phase); phase += 6.28 / count; break;
-        case Shape::Square: {
-            const float threshold = f32(float(count) / f32(100.0 / double(float(100 - duty))));
-            sample = float(i) <= threshold ? 0 : code; break;
+        case Shape::Sine: value = code * (1 + std::sin(2 * pi * i / count)) / 2; break;
+        case Shape::Square: value = i >= count - high ? code : 0; break;
+        case Shape::Triangle: value = double(code) * 2 * (i <= count / 2 ? i : count - i) / count; break;
+        case Shape::HalfSine: value = code * std::sin(2 * pi * i / count); break; // Negative half: 0 below.
+        case Shape::PositiveSine: value = code * std::sin(pi * i / count); break;
+        case Shape::Sawtooth: value = count > 1 ? double(code) * i / (count - 1) : 0; break;
         }
-        case Shape::Triangle: {
-            const float step = f32(float(code) / f32(float(count) / 2.0));
-            value = i < count / 2 ? f32(value + step) : f32(value - step); sample = value; break;
-        }
-        case Shape::HalfSine:
-            sample = phase <= 3.14 ? std::sin(phase) * double(half * 2) : 0; phase += 6.28 / count; break;
-        case Shape::PositiveSine:
-            sample = phase <= 3.14 ? std::sin(phase) * double(code) : 0; phase += 3.14 / count; break;
-        case Shape::Sawtooth:
-            value = f32(value + f32(float(code) / float(count))); sample = value; break;
-        }
-        output[i] = uint8_t(unsignedOf(sample));
+        const long rounded = std::lround(value);
+        output[i] = uint8_t(rounded < 0 ? 0 : rounded > code ? code : rounded);
     }
 }
 bool ModuleWave::build(const Settings &settings, bool enabled, Frame &frame) {
@@ -122,18 +134,18 @@ bool ModuleWave::build(const Settings &settings, bool enabled, Frame &frame) {
     uint8_t wave[MaximumSamples];
     const Shape shape = settings.shape;
     uint64_t target = millihertz;
-    unsigned start = MaximumSamples;
     if (enabled && settings.amplitudeMillivolts) {
         const uint16_t limit = limitMillivolts(shape, millihertz);
         const float volts = float(settings.amplitudeMillivolts < limit ? settings.amplitudeMillivolts : limit) / 1000.0f;
         const uint32_t hertz = uint32_t(millihertz / 1000);
         frame.code = code(volts, correction(shape, hertz, volts));
-        start = frame.code;
     } else target = 1000000; // A zero waveform at 1 kHz (factory OFF: shape 100 at 1000 Hz).
-    frame.timing = timing(target, start, frame.code && shape == Shape::Triangle);
+    // The duty as set, in permille: never cut to whole percents (50.5 % is not 50 %).
+    unsigned duty = settings.dutyPermille;
+    duty = duty < MinimumDuty * 10U ? MinimumDuty * 10U : duty > MaximumDuty * 10U ? MaximumDuty * 10U : duty;
+    // The count holds the shape (a zero waveform any count): never a pulse turned into none or DC.
+    frame.timing = timing(target, frame.code ? shape : Shape::Sine, duty);
     if (!frame.timing.count || !frame.timing.divisor) return false;
-    unsigned duty = settings.dutyPermille / 10;
-    duty = duty < MinimumDuty ? MinimumDuty : duty > MaximumDuty ? MaximumDuty : duty;
     if (frame.code) samples(shape, frame.timing.count, frame.code, duty, wave);
     else for (unsigned i = 0; i < frame.timing.count; ++i) wave[i] = 0;
     if (!SerialFrameCodec::encode(wave, frame.timing.count, frame.timing.divisor, frame.bytes, sizeof frame.bytes))

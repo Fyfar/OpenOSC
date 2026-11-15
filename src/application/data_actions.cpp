@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/application/generator_startup.hpp"
 #include "openosc/settings/instrument_state.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/usb/instrument_usb.hpp"
@@ -126,6 +127,23 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     auto request=data_.scopeRequest(); request.trigger=triggerEditor_.settings();
     if (!applyEdited(request,now)) { view_.notify("Finish data transfer first",now); return false; }
     return true;
+}
+bool ApplicationController::restoreStartupOutput(const PreferencesResult &applied) {
+    if (!GeneratorStartup::restores(prefs_, applied.generator)) return false;
+    return requestGeneratorOutput(true, 0); // Refused: stays off; the kept state stays as it was.
+}
+bool ApplicationController::requestGeneratorOutput(bool on, uint32_t now) {
+    auto &output = data_.generator();
+    if (on && data_.zeroBusy()) return false;
+    startup_.requested(on);
+    if (on && !output.enable()) { startup_.refused(); return false; }
+    if (!on) output.disable();
+    followGeneratorOutput(now);
+    dataRefresh_ = true;
+    return on ? output.enabled() : !output.enabled();
+}
+void ApplicationController::followGeneratorOutput(uint32_t now) {
+    if (startup_.follow(prefs_, GeneratorStartup::confirmed(data_.generator())) && prefs_.generatorStartup) changed(now);
 }
 bool ApplicationController::applyGenerator(const generator::Settings &settings, uint32_t now) {
     if (data_.zeroBusy()) return false;

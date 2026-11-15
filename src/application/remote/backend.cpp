@@ -124,13 +124,12 @@ uint32_t InstrumentBackend::operationTimeoutMs() const {
 DataStatus InstrumentBackend::operationStatus() const { return application_.data_.dmmCommandStatus(); }
 generator::Snapshot InstrumentBackend::generator() const { return application_.data_.generator().snapshot(); }
 bool InstrumentBackend::configureGenerator(const generator::Settings &s) { return application_.applyGenerator(s,Board::milliseconds()); }
-bool InstrumentBackend::output(bool value) {
+bool InstrumentBackend::output(bool value) { return application_.requestGeneratorOutput(value, Board::milliseconds()); }
+bool InstrumentBackend::generatorStartup() const { return application_.prefs_.generatorStartup; }
+bool InstrumentBackend::generatorStartup(bool restore) {
     auto &a = application_;
-    if (value && a.data_.zeroBusy()) return false;
-    if (value && !a.data_.generator().enable()) return false;
-    if (!value) a.data_.generator().disable();
-    a.dataRefresh_ = true;
-    return value ? a.data_.generator().enabled() : !a.data_.generator().enabled();
+    if (a.prefs_.generatorStartup != unsigned(restore)) { a.prefs_.generatorStartup = restore; a.changed(Board::milliseconds()); }
+    return true;
 }
 bool InstrumentBackend::remote() const { return application_.remote_; }
 bool InstrumentBackend::remote(bool value) { return application_.setRemote(value); }

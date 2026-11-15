@@ -12,6 +12,7 @@ private:
     static void draw(lv_event_t *event);
     lv_obj_t *object_ = nullptr;
     uint16_t samples_[96]{};
+    char level_[48] = ""; // generator::LevelText::describe(): the footer line.
     generator::Shape shape_ = generator::Shape::Sine;
     uint16_t duty_ = 0;
     uint32_t color_ = 0;

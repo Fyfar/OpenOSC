@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/application/generator_startup.hpp"
 #include "openosc/application/meter_restore.hpp"
 #include "openosc/application/state.hpp"
 #include "openosc/application/preferences_result.hpp"
@@ -124,6 +125,14 @@ private:
     void store(uint32_t now);
     void applyPreferences();
     PreferencesResult applyDataPreferences();
+    // Boot only, after applyDataPreferences: Startup output Restore last (GeneratorStartup). True: started.
+    bool restoreStartupOutput(const PreferencesResult &applied);
+    // A user's output ON/OFF (the key, OUTP): the one path, so Startup output keeps what the user asked
+    // once the driver confirms it. True when the output is in the state asked.
+    bool requestGeneratorOutput(bool on, uint32_t now);
+    // The confirmed state of a user's request into the preferences (each pass and before any settings
+    // save, so a save right after OUTP ON already has it).
+    void followGeneratorOutput(uint32_t now);
     enum class ScopeApply : uint8_t { Configure, StageIfHeld, Resume };
     bool applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode = ScopeApply::Configure);
     bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode);
@@ -175,6 +184,16 @@ private:
     void scopeEditorKeys(uint32_t keys, uint32_t now);
     void measurementKeys(uint32_t keys, uint32_t now);
     void generatorEditorKeys(uint32_t keys, uint32_t now);
+    // The generator's three panels from the GEN screen and from each other (generator_editor_keys.cpp):
+    // F1 WAVEFORM, F2 FREQUENCY, F3 PARAMETERS. Leaving a panel applies its field in progress first;
+    // refused, the panel stays with its draft and says so. True when the keys were such a switch.
+    void openGeneratorEditor(bool wave);
+    void openFrequencyEditor();
+    bool switchGeneratorPanel(uint32_t keys, uint32_t now);
+    bool finishGeneratorField(uint32_t now); // False: refused, nothing applied, the panel stays.
+    void generatorPanelKeys(uint32_t keys, uint32_t now);  // generatorEditorKeys' work, before the captions.
+    void frequencyPanelKeys(uint32_t keys, uint32_t now);  // frequencyKeys' work, before the captions.
+    void showGeneratorKeys(); // The cards' captions for the panel open now (GeneratorScreen::keys).
     void startAuto(uint32_t now);
     void serviceAuto(uint32_t now);
     bool cancelAuto(uint32_t now,bool hold=false);
@@ -250,6 +269,8 @@ private:
     ui::ScopeAppearanceProperties colorsEditor_{themes_.theme()};
     ApplicationState state_;
     Preferences prefs_;
+    GeneratorStartup startup_; // Startup output: the user's last ON/OFF request awaiting confirmation.
+    bool captureHalvedNoticed_ = false; // The DAC stream's halved capture maximum was said (displayData).
     ApplicationView view_;
     screenshot::ImageCatalog images_;
     screenshot::ImageReader imageReader_;

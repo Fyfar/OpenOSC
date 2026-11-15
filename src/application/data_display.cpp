@@ -16,6 +16,11 @@ void ApplicationController::displayData(uint32_t now) {
         fpsFlushes_=flushes; fpsAt_=now;
     }
     view_.generatorActive(data_.generator().enabled());
+    // The DAC stream halves the capture's maximum rate: said once as it starts (output on, PWM to DAC,
+    // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
+    const bool captureHalved = data_.generatorLoadsBus();
+    if (captureHalved && !captureHalvedNoticed_ && uiReady_) view_.notify("GEN on DAC: Scope max sample rate /2 while it runs", now);
+    captureHalvedNoticed_ = captureHalved;
     if (state_.mode == MeasurementMode::Oscilloscope)
         view_.scopeTriggerState(data_.scopeRequest().trigger.mode, data_.scopeWaiting());
     if (state_.mode==MeasurementMode::Oscilloscope) {
@@ -74,7 +79,7 @@ void ApplicationController::displayData(uint32_t now) {
             view_.scopeSettings(next,selectedChannel_);
             syncCursorFocus();
         }
-        view_.scopeGenerator(data_.generator().snapshot());
+        view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
         if (!view_.waveformVisible()) { readouts_.suspend(data_); dataAt_=now; return; }
         scope::FrameLease frame;
         if (data_.acquireScope(frame)) {

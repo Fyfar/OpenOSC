@@ -16,7 +16,7 @@ public:
     void status(DataStatus status, bool held);
     void settings(const scope::FrameMetadata &next, unsigned channel);
     void context(unsigned channel, plot::Focus focus);
-    void generator(const generator::Snapshot &output);
+    void generator(const generator::Snapshot &output, bool captureHalved);
     void counters(const scope::CounterSnapshot &snapshot);
     // False when nothing was painted (no frame shown yet, or a panel over the scope).
     bool readouts(const scope::ReadoutResult &result, const ReadoutState &state);

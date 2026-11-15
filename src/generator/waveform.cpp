@@ -1,5 +1,6 @@
 #include "openosc/generator/waveform.hpp"
 #include <cmath>
+#include <cstdio>
 #include <numeric>
 #include <limits>
 
@@ -32,15 +33,26 @@ unsigned dacPoints(const Settings &settings,uint32_t clock) {
 }
 bool Settings::valid() const {
     return static_cast<unsigned>(shape) <= static_cast<unsigned>(Shape::Sawtooth) && frequencyHz.valid() &&
-           unsigned(level) <= unsigned(Level::Custom) &&
+           unsigned(level) <= unsigned(Level::Custom) && unsigned(squareDrive) <= unsigned(SquareDrive::Pwm) &&
            minimumCode <= maximumCode && maximumCode <= 4095 && dutyPermille <= 1000 && amplitudeMillivolts <= 5000;
 }
 CodeRange Levels::codes(const Settings &s) {
     if (s.level == Level::Custom) return {s.minimumCode,s.maximumCode};
     if (s.level == Level::Low) return {0,uint16_t(s.shape==Shape::Sine ? 1600 : 1500)};
-    if (s.level == Level::Dedicated && s.shape==Shape::Sine && s.frequencyHz.value()>=1000)
+    if (s.level == Level::Dedicated && s.shape==Shape::Sine && kilohertz(s))
         return {600,3600};
     return {0,4000};
+}
+const char *Levels::label(Level level) {
+    return level == Level::Low ? "1.0" : level == Level::Custom ? nullptr : "2.5";
+}
+void Levels::describe(const Settings &s, char *output, size_t capacity) {
+    if (!capacity) return;
+    const char *caption = label(s.level);
+    const auto range = codes(s);
+    if (!caption) std::snprintf(output, capacity, "Custom DAC %u-%u", range.minimum, range.maximum);
+    else if (pwm(s)) std::snprintf(output, capacity, "PWM logic level, factory label %sV", caption);
+    else std::snprintf(output, capacity, "DAC %u-%u, factory label %sV", range.minimum, range.maximum, caption);
 }
 bool WaveTable::build(const Settings &settings, uint16_t *samples, size_t count) {
     if (!settings.valid() || !samples || count < 2 || count > 4096)
@@ -82,7 +94,7 @@ bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan 
     if (!clock || !settings.valid() || settings.frequencyHz.value()*1000>DacCapabilities::maximumMillihertz(settings.shape,settings.level))
         return false;
     OutputPlan candidate;
-    candidate.pwm = settings.shape == Shape::Square && settings.level==Level::Dedicated;
+    candidate.pwm = Levels::pwm(settings);
     if (candidate.pwm) {
         if (!TimerPlan::calculate(clock, settings.frequencyHz, candidate.timer, 2))
             return false;

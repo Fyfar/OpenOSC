@@ -36,7 +36,8 @@ public:
     bool waveformVisible() const { return !host_.overlayActive(); }
     void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel) { scope_.settings(metadata, channel); }
     void scopeContext(unsigned channel, plot::Focus focus) { scope_.context(channel, focus); }
-    void scopeGenerator(const generator::Snapshot &output) { scope_.generator(output); }
+    // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus().
+    void scopeGenerator(const generator::Snapshot &output, bool captureHalved) { scope_.generator(output, captureHalved); }
     void focusParameter(unsigned index) { host_.parameters().select(index); }
     // Block orders (CONTRACT.md §4): only y moves, nothing is rebuilt (record, HOLD, zoom, leases,
     // statistics stay); the same order is a no-op; an invalid order is ignored. Applied at once when
@@ -65,6 +66,7 @@ public:
         meter_.fastBar(result,status,relative,now);
     }
     void generatorStatus(const generator::Snapshot &snapshot) { generator_.status(snapshot); }
+    void generatorKeys(const ui::GeneratorKeys &keys) { generator_.keys(keys); } // What F1-F4 do now.
     void generatorActive(bool enabled);
     void usbConnected(bool connected);
     void battery(const power::BatteryState &state) { battery_.update(state); }
@@ -87,6 +89,7 @@ public:
     void images(const ui::ImageList &images);
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false);
     void notify(const char *text, uint32_t now);
+    const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
     void powerHold(int percent) { powerHold_.show(percent); } // PowerHold::percent; -1 hides.
     void service(uint32_t now);
 

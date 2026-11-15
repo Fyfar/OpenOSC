@@ -9,7 +9,8 @@ enum class SettingsAction : uint8_t {
     RunProfile, Restart, BacklightTimeout, BacklightIdleLevel, PowerOffTimeout, RestoreSettings, Images, ClearImages,
     CalibrateZero,ReloadZero,FactoryZero,ShowFps,BatteryDisplay,BufferSize,CalibrateHardwareZero,
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
-    InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave
+    InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
+    GeneratorStartup
 };
 struct SettingsEntry {
     const char *name;

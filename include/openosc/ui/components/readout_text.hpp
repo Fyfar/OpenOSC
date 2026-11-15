@@ -12,8 +12,10 @@ struct ReadoutState {
     uint32_t ageMs=0;
 };
 // What the footer shows of the basis, without a text of its own. Screen (the calm default):
-// nothing. Full: the rail under each channel's values, lit as far as the pass has covered the
-// record (100 when done); stale when the values are of an older record than the one shown and
+// nothing. Full: the rail under each channel's values, whole while the values on show are of a
+// full pass. Only the first pass, with no values yet, lights it as far as it has covered the
+// record: a pass refreshing older values (every record in RUN) keeps it whole, so RUN never
+// empties and refills it. Stale when the values are of an older record than the one shown and
 // were finished StaleMs or longer ago (a pass that keeps up refreshes them sooner).
 struct ReadoutIndicator {
     static constexpr uint32_t StaleMs = 2000;

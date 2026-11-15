@@ -8,19 +8,25 @@ namespace openosc::generator {
 // (zt_fw docs/subsystems/generator.md, generator_controls.md; addresses below are 706S GEN). The
 // module plays N one-byte samples, each held `divisor` ticks of a clock the factory takes as 200 MHz
 // (a software constant: the module's real clock and output voltage are not established). OpenOSC
-// keeps the factory numbers except where they are unsafe (each noted at its function):
+// keeps the factory's amplitude numbers (limit, correction, code) exactly; the waveform and its timing
+// are exact where the factory's are approximate or unsafe (each noted at its function):
 //  - amplitude 0 V is a zero waveform (the factory wraps it to full scale);
-//  - the sample-count search starts at least at 20, so N and divisor are never 0 (the factory starts
-//    at the amplitude code and sends N=0/divisor=0 below code 20);
 //  - the limit follows shape and frequency both ways (the factory only lowers it), and the
 //    correction is computed from the amplitude already clamped to it;
-//  - a triangle searches even sample counts (the factory drops an odd N by one without a new divisor).
+//  - samples: exact pi and 2*pi phases, full scale reached (the factory steps 6.28/N and 3.14/N from
+//    code>>1 and accumulates float steps); the square has round(N*duty) high samples, 100 % all high
+//    (the factory's "i <= threshold" leaves a zero sample at 100 % and none high at 1 % of 100); the
+//    duty in permille as set (the factory's whole percents are a subset);
+//  - timing: every legal sample count 20..255 (even for a triangle, one that holds the duty for a
+//    square) with floor and ceil divisors, compared by the exact rational error (the factory starts at
+//    the amplitude code, floors only, truncates the error to an integer, stops below N=100 and sends
+//    N=0/divisor=0 below code 20).
 class ModuleWave {
 public:
     static constexpr uint32_t ClockHz = 200000000;      // Factory constant, nominal.
     static constexpr unsigned MinimumSamples = 20, MaximumSamples = SerialFrameCodec::MaximumSamples;
     static constexpr uint16_t MaximumMillivolts = 5000;  // Factory amplitude UI 0..5 V, 0.1 V steps.
-    static constexpr uint8_t MinimumDuty = 1, MaximumDuty = 99; // Percent (factory 1..100: 100 is DC).
+    static constexpr uint8_t MinimumDuty = 1, MaximumDuty = 100; // Percent, the factory's 1..100 (100: constant high).
     struct Timing { uint32_t divisor = 0; unsigned count = 0; };
     struct Frame {
         uint8_t bytes[SerialFrameCodec::Bytes]{};
@@ -35,10 +41,19 @@ public:
     static float correction(Shape shape, uint32_t hertz, float volts);
     // Full-scale code for the clamped amplitude and its correction (2407178C).
     static uint16_t code(float volts, float correction);
-    // Divisor and sample count for `millihertz`, candidates from `start` down to 20 (240707E0 search).
-    static Timing timing(uint64_t millihertz, unsigned start, bool even);
-    // `count` samples of `shape` up to `code` (240707E0 builders); `duty` in percent for the square.
-    static void samples(Shape shape, unsigned count, uint16_t code, unsigned duty, uint8_t *output);
+    // A square's high samples of `count` at `permille`: round(count*permille/1000); and whether that is
+    // the waveform asked for: 0 none and 1000 all high (the endpoints), between them neither none nor all.
+    static unsigned highSamples(unsigned count, unsigned permille) { return (count * (permille > 1000 ? 1000 : permille) + 500) / 1000; }
+    static bool holds(unsigned count, unsigned permille) {
+        const unsigned high = highSamples(count, permille);
+        return !permille ? !high : permille >= 1000 ? high == count : high && high < count;
+    }
+    // Sample count and divisor nearest `millihertz` (exact rational error) among the counts the shape
+    // can use (even for a triangle, holding the duty for a square); equal errors: the better shape (the
+    // square's nearer duty, a sine family's count by 4, then more samples). count 0: none can.
+    static Timing timing(uint64_t millihertz, Shape shape, unsigned dutyPermille = 500);
+    // `count` samples of `shape` from 0 to `code`; the square's duty in permille (low run first).
+    static void samples(Shape shape, unsigned count, uint16_t code, unsigned dutyPermille, uint8_t *output);
     // The frame for `settings` (OFF: `enabled` false, a zero waveform at 1 kHz as the factory's OFF).
     static bool build(const Settings &settings, bool enabled, Frame &frame);
 };

@@ -11,10 +11,21 @@ bool Engine::generatorCommand(const Command &c) {
     const bool shape = match("SOURce:FUNCtion"), frequency = match("SOURce:FREQuency"), duty = match("SOURce:PULSe:DCYCle"), output = match("OUTPut");
     const bool level=match("SOURce:LEVel:PROFile"), low=match("SOURce:LEVel:LOW"), high=match("SOURce:LEVel:HIGH");
     const bool amplitude = match("SOURce:VOLTage");
-    if (!shape && !frequency && !duty && !output && !level && !low && !high && !amplitude) return false;
+    // ZT703S: the Dedicated square's drive (FACTory: DAC below 1 kHz, PWM from 1 kHz; PWM always) and
+    // the path the output takes now (DAC or PWM, the one decision Levels::pwm()).
+    const bool drive = match("SOURce:SQUare:DRIVe"), path = match("SOURce:LEVel:PATH");
+    if (match("OUTPut:STARtup")) { // Startup output: OFF (default) or RESTore the last confirmed state.
+        if (c.query) reply("%s", backend_.generatorStartup() ? "REST" : "OFF");
+        else if (Header::word(c.argument, "OFF")) { if (!backend_.generatorStartup(false)) error(-200); }
+        else if (Header::word(c.argument, "RESTore")) { if (!backend_.generatorStartup(true)) error(-200); }
+        else error(-224);
+        return true;
+    }
+    if (!shape && !frequency && !duty && !output && !level && !low && !high && !amplitude && !drive && !path) return false;
     using Caps = generator::Capabilities;
     // Level profiles and DAC codes are the ZT703S DAC's; a volt amplitude is the ZT706S module's.
-    if (((level || low || high) && !Caps::Levels) || (amplitude && !Caps::Amplitude)) { error(-241, c.query); return true; }
+    if (((level || low || high || drive || path) && !Caps::Levels) || (amplitude && !Caps::Amplitude)) { error(-241, c.query); return true; }
+    if (path && !c.query) { error(-113); return true; } // PATH is a query only.
     auto settings = backend_.generator().requested;
     if (c.query) {
         if (output) reply("%u", backend_.generator().enabled);
@@ -22,6 +33,8 @@ bool Engine::generatorCommand(const Command &c) {
         else if (duty) number(settings.dutyPermille / 10.);
         else if (amplitude) number(settings.amplitudeMillivolts / 1000.);
         else if (level) reply("%s",generator::Levels::Names[unsigned(settings.level)]);
+        else if (drive) reply("%s", settings.squareDrive == generator::SquareDrive::Pwm ? "PWM" : "FACT");
+        else if (path) reply("%s", generator::Levels::pwm(settings) ? "PWM" : "DAC");
         else if (low || high) { const auto codes=generator::Levels::codes(settings); reply("%u",low ? codes.minimum : codes.maximum); }
         else { constexpr const char *names[] = {"SIN","SQU","TRI","HALF","POS","RAMP"}; reply("%s", names[unsigned(settings.shape)]); }
         return true;
@@ -31,7 +44,11 @@ bool Engine::generatorCommand(const Command &c) {
         if (boolean(c, value)) { if (!backend_.output(value)) error(-200); else waitGenerator(); }
         return true;
     }
-    if (level) {
+    if (drive) {
+        if (Header::word(c.argument, "FACTory")) settings.squareDrive = generator::SquareDrive::Factory;
+        else if (Header::word(c.argument, "PWM")) settings.squareDrive = generator::SquareDrive::Pwm;
+        else { error(-224); return true; }
+    } else if (level) {
         constexpr const char *names[]={"DEDicated","LOW","HIGH","CUSTom"};
         unsigned index=0; while (index<4 && !Header::word(c.argument,names[index])) ++index;
         if (index==4) { error(-224); return true; }

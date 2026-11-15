@@ -175,6 +175,10 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     calibration::ZeroSelection::Result factoryZero();
     dmm::Session &meter() { return meter_; }
     board::GeneratorOutput &generator() { return generator_; }
+    // The ZT703S DAC stream shares the bus (Q-14, bus_load.cpp): while it runs (or announces its
+    // start) the capture's maximum sample rate is halved (captureRateLimit). PWM and the ZT706S
+    // module never load it. The one rule for the plans and for what the UI says about them.
+    bool generatorLoadsBus() const;
     MeasurementMode measurementMode() const { return measurement_; }
     void poll(uint32_t nowMs);
     // What poll() does to the capture, generator, counter and UART streams, without FAT, UI or
@@ -221,7 +225,6 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void serviceZero(uint32_t now);
     bool configureScopeCore(const ScopeRequest &request,bool force=false,bool preserveRecord=false);
     void describeChannels(scope::FrameMetadata &metadata);
-    bool generatorLoadsBus() const;
     // The DMM control word follows what the generator's output needs (generator::controlBits).
     void followMeterGenerator();
     // The capture's share of the bus with the ZT703S DAC stream (bus_load.cpp, Q-14).

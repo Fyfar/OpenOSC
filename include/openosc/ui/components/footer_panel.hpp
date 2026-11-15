@@ -28,6 +28,7 @@ public:
     unsigned count() const { return count_; }
     const Text &text(unsigned index) const { return texts_[index]; }
     int lit() const { return lit_; }
+    uint32_t railColor() const { return shown_.lit > 0 ? shown_.railColor : 0; } // On screen (0: no rail).
     lv_obj_t *object() const { return object_; }
 
 private:
