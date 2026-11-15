@@ -16,6 +16,12 @@ firmware. It also adds a small Recovery bootloader that updates the firmware fro
 > **I take no responsibility for bricked or damaged devices.** You install this firmware entirely
 > at your own risk.
 
+> [!NOTE]
+> **You can always go back to the stock firmware.** OpenOSC never modifies the factory bootloader,
+> your calibration or the factory settings. The factory bootloader still accepts official updates,
+> so installing the official firmware replaces OpenOSC completely.
+> See [Going back to the stock firmware](#going-back-to-the-stock-firmware).
+
 ## Screenshots
 
 Captured on a ZT703S running OpenOSC.
@@ -113,7 +119,7 @@ modifies it. OpenOSC is installed on top of it in two parts:
 
 | Part | Address | Purpose |
 | --- | --- | --- |
-| Factory bootloader | `0x08000000` | Untouched. Accepts the stock `.ZTK` update containers. |
+| Factory bootloader | `0x08000000` | Untouched, together with the calibration and factory settings stored in the same block. Accepts the stock `.ZTK` update containers. |
 | OpenOSC Recovery | `0x08020000` | Second-stage bootloader (128 KiB). Exposes a USB drive and installs the main firmware. |
 | OpenOSC firmware | `0x08040400` | The main application. |
 
@@ -161,7 +167,9 @@ OpenOSC has no tool to restore the backup. Writing it back requires an SWD progr
 1. Start Recovery. It opens automatically when no valid firmware is installed.
    Later, you can open it by holding **F2** while the device starts.
 2. Connect the device to a computer. Recovery shows the device's storage as a USB drive.
-3. Copy `firmware.OSC` (or `firmware.bin`) for your model into `/openosc/UPDATE/`.
+3. Copy the `.OSC` file for your model into `/openosc/UPDATE/`: `OpenOSC-Firmware-ZT703S.OSC` or
+   `OpenOSC-Firmware-ZT706S.OSC` from the release, or `firmware.OSC` (or `firmware.bin`) from your
+   own build.
 4. Finish copying. Optionally, eject the drive on the computer.
 5. On the device, select **UPDATE FIRMWARE**, choose the file, select **CONFIRM** and press **MENU**.
 6. When the update completes, select **START APPLICATION**.
@@ -173,6 +181,26 @@ Confirm it and Recovery detaches the drive itself; the cable can stay connected.
 
 Recovery checks the board model, CRC and vector table of the image before erasing anything.
 An image for another model is rejected. Later updates of the main firmware use step 2 only.
+
+### Going back to the stock firmware
+
+You can return to the stock firmware at any time. OpenOSC only replaces the application area. The
+factory bootloader is never modified, and it starts before OpenOSC every time the device is
+switched on.
+
+1. Get the official firmware update (`.ZTK`) for your model from the manufacturer. It is a good idea
+   to download it before you install OpenOSC.
+2. Install it exactly like [step 1](#step-1-install-the-recovery-bootloader-standard-update):
+   put the device into the factory USB update mode and copy the file into the `firmware` folder.
+3. The factory bootloader replaces OpenOSC Recovery and the OpenOSC firmware with the stock
+   application.
+
+The calibration and the factory settings are stored in the factory block, which OpenOSC never
+writes, so the stock firmware uses them as before. OpenOSC's own files in the `/openosc/` folder
+on the storage drive are not needed by the stock firmware and can be deleted.
+
+The [factory block backup](#recommended-back-up-the-factory-block) is not needed for this. It is a
+safety copy for the unlikely case that the block itself is ever damaged.
 
 ## Building
 
