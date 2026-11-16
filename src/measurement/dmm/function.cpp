@@ -54,9 +54,13 @@ bool FunctionSelector::poll(const Result &latest, uint32_t now, CommandGroup &co
     if (!busy()) return false;
     if (int32_t(now - deadline_) >= 0) { status_ = DataStatus::Timeout; return false; }
     if (latest.timestampUs < minimumTimestampUs_) return false;
-    if (latest.sequence && Functions::identify(latest) == requested_) { status_ = DataStatus::Ok; return false; }
-    if (!latest.sequence || int32_t(now - nextAt_) < 0 || (attempts_ && latest.sequence == sequence_)) return false;
+    const Function shown = latest.sequence ? Functions::identify(latest) : Function::Unknown;
+    if (latest.sequence && shown == requested_) { status_ = DataStatus::Ok; return false; }
+    if (!latest.sequence || int32_t(now - nextAt_) < 0) return false;
+    // Another key only once the last one has shown (see KeySettleMs); otherwise wait for the deadline.
+    if (attempts_ && (latest.sequence == sequence_ || shown == Function::Unknown || shown == origin_)) return false;
     if (attempts_ >= 6) { status_ = DataStatus::Timeout; return false; }
+    prepared_ = shown;
     command = Functions::group(requested_); return true;
 }
 } // namespace openosc::dmm
