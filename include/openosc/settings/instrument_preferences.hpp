@@ -20,6 +20,10 @@ struct ScopePreferences {
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
+    // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact) for reading the factory record
+    // at the NEXT start (DataAccess::initialize); Reload settings never re-reads the record. Only on
+    // outside evidence about an ambiguous record (docs/ZERO_CALIBRATION.md); files without it: auto.
+    uint32_t factoryRecordFormat=0;
     // The look only (never the capture, HOLD or the measurements): the blocks' order under the
     // status bar, and the colour scheme with its per-role overrides. Files before them: defaults.
     ScopeArrangement arrangement;

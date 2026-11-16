@@ -75,6 +75,16 @@ public:
     virtual bool performance(PerformanceSnapshot &) const { return false; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
+    // The factory calibration record as this boot decoded it (SYST:CAL:FACT?, docs/SCPI.md), from the
+    // record alone: no plan, user gain, display gain, channel state or calibration in progress.
+    // identity: the CRC calibration files are bound to; gainWord: as decoded (0: not written, also every
+    // compact record); scale: whether the record gives the channel a scale.
+    struct FactoryCalibration { bool valid = false; uint16_t identity = 0, gainWord[2] = {0, 0}; bool scale[2] = {false, false}; };
+    virtual bool factoryCalibration(FactoryCalibration &) const { return false; }
+    // SYST:CAL:FACT:FORM?: the policy this boot read the record with (AUTO, LONG, COMPACT; not a later
+    // settings change) and the resolved format (LONG, COMPACT, AMBIGUOUS; INVALID without a record).
+    struct FactoryRecordReading { const char *policy = "AUTO", *format = "INVALID"; };
+    virtual bool factoryRecordFormat(FactoryRecordReading &) const { return false; }
     virtual bool recovery() { return false; }
     // Run mode as the core clock in MHz (0: no profile runs, the HSI fallback). The setter changes
     // it in place, as the Settings menu does, and returns 0 or the SCPI error to report.

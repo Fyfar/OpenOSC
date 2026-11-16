@@ -49,6 +49,19 @@ bool Engine::common(const Command &c) {
         else reply("1,%lu,%lu,%lu,%lu,%lu,%u",static_cast<unsigned long>(m.total),static_cast<unsigned long>(m.used),
                    static_cast<unsigned long>(m.peak),static_cast<unsigned long>(m.free),
                    static_cast<unsigned long>(m.largestFree),unsigned(m.fragmentationPct));
+    } else if (match("SYSTem:CALibration:FACTory")) {
+        // valid,identity_crc,gainword1,gainword2,factory_scale1,factory_scale2: the record alone (docs/SCPI.md).
+        Backend::FactoryCalibration f;
+        if (!c.query || *c.argument) error(-108,c.query);
+        else if (!backend_.factoryCalibration(f)) error(-230,true);
+        else reply("%u,%u,%u,%u,%u,%u",unsigned(f.valid),unsigned(f.identity),unsigned(f.gainWord[0]),unsigned(f.gainWord[1]),
+                   unsigned(f.scale[0]),unsigned(f.scale[1]));
+    } else if (match("SYSTem:CALibration:FACTory:FORMat")) {
+        // active_boot_policy,resolved_format (docs/SCPI.md).
+        Backend::FactoryRecordReading f;
+        if (!c.query || *c.argument) error(-108,c.query);
+        else if (!backend_.factoryRecordFormat(f)) error(-230,true);
+        else reply("%s,%s",f.policy,f.format);
     } else if (match("SYSTem:CLOCk:MODE")) {
         if (c.query) { if (*c.argument) error(-108,true); else reply("%lu", static_cast<unsigned long>(backend_.coreMhz())); }
         else {

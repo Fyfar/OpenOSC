@@ -182,5 +182,18 @@ bool InstrumentBackend::performance(PerformanceSnapshot &p) const {
     return true;
 }
 bool InstrumentBackend::memory(MemorySnapshot &m) const { return application_.uiReady_ && GuiHeap::read(m); }
+bool InstrumentBackend::factoryCalibration(FactoryCalibration &f) const {
+    const auto &record = application_.data_.scopeCalibration().factory();
+    f = FactoryCalibration{};
+    f.valid = record.valid(); f.identity = record.crc();
+    for (unsigned c = 0; c < 2; ++c) { f.gainWord[c] = record.gainWord(c); f.scale[c] = record.factoryScale(c); }
+    return true;
+}
+bool InstrumentBackend::factoryRecordFormat(FactoryRecordReading &f) const {
+    const auto &record = application_.data_.scopeCalibration().factory();
+    f.policy = factoryRecordName(application_.data_.factoryRecordPolicy());
+    f.format = record.valid() ? factoryRecordName(record.format()) : "INVALID";
+    return true;
+}
 const char *InstrumentBackend::version() const { return OPENOSC_VERSION; }
 } // namespace openosc

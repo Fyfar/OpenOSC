@@ -72,18 +72,22 @@ void RecoveryScreens::backupResult(uint32_t crc) {
 }
 void RecoveryScreens::calibration(unsigned channel, bool hex) {
     CalibrationRecord record;
+    CalibrationData decoded; // The application's decoder, always Auto here (no settings in Recovery).
+    const bool valid = record.load(decoded);
     frame("FACTORY CALIBRATION (READ ONLY)", "L/R=CHANNEL  MENU=HEX/DEC  F4=BACK");
     screen_.text(8, 32, "CH:"); screen_.number(32, 32, channel + 1);
     screen_.text(62, 32, hex ? "HEX" : "DEC");
-    screen_.text(104, 32, record.valid() ? "CRC OK" : "CRC FAILED",
-                 record.valid() ? Display::Green : Display::Red);
+    screen_.text(104, 32, valid ? factoryRecordName(decoded.format()) : "CRC FAILED",
+                 !valid ? Display::Red : decoded.format() == FactoryRecordFormat::Ambiguous ? Display::Cyan : Display::Green);
+    if (valid) screen_.text(196, 32, "AUTO");
     for (unsigned row = 0; row < CalibrationRecord::Rows; ++row) {
         screen_.number(8, 48 + row * 12, row, 2);
         for (unsigned col = 0; col < CalibrationRecord::Columns; ++col)
             screen_.number(30 + col * 41, 48 + row * 12, record.value(channel, row, col), hex ? 4 : 5, hex ? 16 : 10);
     }
-    screen_.text(8, 198, "CRC:"); screen_.number(38, 198, record.storedCrc(), 4, 16);
-    screen_.text(86, 198, "CALC:"); screen_.number(122, 198, record.computedCrc(), 4, 16);
+    // The identity calibration files are bound to (a compact record's own CRC; Ambiguous reads as long).
+    screen_.text(8, 198, "ID CRC:");
+    if (valid) screen_.number(62, 198, decoded.crc(), 4, 16); else screen_.text(62, 198, "----");
     screen_.text(168, 198, "BASE:0801C000");
     screen_.text(8, 210, "346B EXTRA:");
     for (unsigned i = 0; i < 4; ++i) screen_.number(80 + i * 42, 210, record.word(336 + i * 2), 4, 16);

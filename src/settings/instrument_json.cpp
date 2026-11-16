@@ -28,6 +28,7 @@ template<size_t N> bool choice(JsonObjectConst object, const char *name, uint32_
 }
 constexpr const char *couplings[] = {"dc", "ac"}, *edges[] = {"rising", "falling"};
 constexpr const char *triggerModes[] = {"auto", "normal", "single"};
+constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
 static_assert(sizeof displays / sizeof *displays == MeterPreferences::Displays && sizeof faces / sizeof *faces == MeterPreferences::Faces &&
@@ -112,6 +113,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     if ((budget && !number(scope, "record_points", s.recordPoints)) || (legacy && !number(scope, "samples", legacySamples)) ||
         (legacy && (legacySamples < 4 || legacySamples > 65536 || (legacySamples & 3)))) return false;
     if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) ||
+        !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
         !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter,"auto",output.meter.automatic) ||
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
@@ -178,6 +180,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     scope["record_points"] = s.recordPoints;
     scope["run_mode"] = s.runMode;
     scope["roll_auto"]=bool(s.rollAuto);
+    if (s.factoryRecordFormat) scope["factory_record_format"] = factoryRecordFormats[s.factoryRecordFormat]; // Absent: auto.
     auto channels = scope.createNestedArray("channels");
     for (unsigned c = 0; c < 2; ++c) {
         auto channel = channels.createNestedObject();

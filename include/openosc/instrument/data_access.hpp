@@ -38,7 +38,14 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     ~DataAccess() { StorageAdmission::detach(this); }
     DataAccess(const DataAccess &) = delete;
     DataAccess &operator=(const DataAccess &) = delete;
-    bool initialize(MeasurementMode view);
+    // factoryRecord: how the factory calibration record is read (the settings' choice, read at boot
+    // only: SYST:CAL:FACT:FORM? reports this one, not a later Reload settings).
+    bool initialize(MeasurementMode view, FactoryRecordPolicy factoryRecord = FactoryRecordPolicy::Auto);
+    FactoryRecordPolicy factoryRecordPolicy() const { return factoryRecordPolicy_; }
+    // Calibration files set aside (archived *.bad) by their last load, at boot or Reload: invalid or
+    // bound to another factory record (an identity that changed with the record's format).
+    enum CalibrationFiles : unsigned { ZeroJson = 1, PwmJson = 2, GainJson = 4, InterleaveJson = 8 };
+    unsigned calibrationArchived() const;
     bool select(MeasurementMode view);
     void noteFrameDemand(uint32_t now) { frameRequestedAt_ = now; capturePaused_ = false; }
     // Skips capture restarts while nothing consumes frames; a recent frame request overrides it.
@@ -295,6 +302,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool calibrate(uint32_t now,calibration::ZeroProcedure &procedure);
     DataStatus interleaveChange() const;
     CalibrationData calibration_; // The factory record: read-only.
+    FactoryRecordPolicy factoryRecordPolicy_ = FactoryRecordPolicy::Auto; // The one this boot read the record with.
     calibration::ScopeCalibration scopeCalibration_{calibration_};
     calibration::ZeroFile zeroFile_;
     calibration::PwmFile pwmFile_;

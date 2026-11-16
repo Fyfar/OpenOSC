@@ -24,7 +24,8 @@ namespace openosc {
     prefs_ = preferences_.values();
     applyPreferences();
     battery_.initialize();
-    const bool backend = data_.initialize(state_.mode);
+    // The factory record's reading is the settings' choice at boot only (Reload settings keeps it).
+    const bool backend = data_.initialize(state_.mode, FactoryRecordPolicy(prefs_.scope.factoryRecordFormat));
     const auto applied = applyDataPreferences();
     restoreStartupOutput(applied); // After the saved settings were applied; never with refused ones.
     InstrumentBackend tmcBackend(*this), serialBackend(*this);
@@ -63,7 +64,15 @@ namespace openosc {
         else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(theme, Board::milliseconds());
         else if (themes_.error()) view_.notify(themes_.error(), Board::milliseconds());
         else if (data_.zeroFile().error()) view_.notify(data_.zeroFile().error(),Board::milliseconds());
-        else if (data_.zeroFile().repaired()) view_.notify("Bad zero JSON preserved; profile restored",Board::milliseconds());
+        else if (const unsigned archived = data_.calibrationArchived()) {
+            // Invalid, or bound to another factory record (its identity changed with the record's
+            // format): kept as *.bad.NNNN.json, never rebound; those corrections are off now.
+            char text[96];
+            std::snprintf(text, sizeof text, "Calibration JSON archived (*.bad):%s%s%s%s",
+                          archived & DataAccess::ZeroJson ? " zero" : "", archived & DataAccess::PwmJson ? " PWM" : "",
+                          archived & DataAccess::GainJson ? " gain" : "", archived & DataAccess::InterleaveJson ? " interleave" : "");
+            view_.notify(text, Board::milliseconds());
+        }
         else if (boot_diagnostics.error==4) view_.notify("High unavailable; Normal active",Board::milliseconds());
     } else { // Headless: no UI; Remote (and its 200 MHz) only if that profile really runs.
         boot_diagnostics.error = 2; display_.enabled(false); setRemote(true);

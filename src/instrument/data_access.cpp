@@ -19,9 +19,10 @@ DataAccess::DataAccess(Filesystem &fs)
     attachBus(generator_, *this);
     StorageAdmission::attach(this); // NOR SPI transfers ask the capture to yield first.
 }
-bool DataAccess::initialize(MeasurementMode view) {
+bool DataAccess::initialize(MeasurementMode view, FactoryRecordPolicy factoryRecord) {
     CalibrationRecord record;
-    record.load(calibration_);
+    factoryRecordPolicy_ = factoryRecord;
+    record.load(calibration_, factoryRecord); // Refused: calibration_ stays invalid (no record, no scale).
     if (calibration_.valid()) {
         zeroFile_.load(calibration_.crc());
         if (pwmFile_.load()) scopeCalibration_.setPwm(pwmFile_.values());
@@ -37,6 +38,10 @@ bool DataAccess::initialize(MeasurementMode view) {
     generator_.disable(); // A known OFF state (the ZT706S module may still play what it had).
     initialized_ = true;
     return select(view == MeasurementMode::Generator ? MeasurementMode::Oscilloscope : view);
+}
+unsigned DataAccess::calibrationArchived() const {
+    return (zeroFile_.repaired() ? ZeroJson : 0) | (pwmFile_.repaired() ? PwmJson : 0) |
+           (gainFile_.repaired() ? GainJson : 0) | (interleaveFile_.repaired() ? InterleaveJson : 0);
 }
 bool DataAccess::select(MeasurementMode view) {
     releaseReadout(); // Revoked first: nothing waits for a background readout.
