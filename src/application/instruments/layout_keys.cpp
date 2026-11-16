@@ -6,6 +6,7 @@ namespace openosc {
 // already has it, and none reaches the capture, HOLD or the measurements.
 void ApplicationController::applyLooks() {
     view_.scopeArrangement(prefs_.scope.arrangement);
+    view_.generatorArrangement(prefs_.generatorArrangement);
     view_.meterArrangement(prefs_.meter.digitalArrangement, prefs_.meter.analogArrangement);
     view_.scopeAppearance(prefs_.scope.appearance);
 }
@@ -24,6 +25,26 @@ template<class Block> bool ApplicationController::layoutKeys(uint32_t keys, ui::
 }
 void ApplicationController::scopeLayoutKeys(uint32_t keys, uint32_t now) {
     if (layoutKeys(keys, scopeLayout_, prefs_.scope.arrangement, now)) openAnalyze(ui::ScopeActions::Layout);
+}
+void ApplicationController::openGeneratorLayout(bool fromSettings) {
+    generatorLayoutFromSettings_ = fromSettings;
+    state_.settingsOpen = false;
+    generatorLayout_ = ui::ArrangementProperties<GeneratorBlock>("GENERATOR LAYOUT", prefs_.generatorArrangement);
+    openPanel(Panel::GeneratorLayout, generatorLayout_);
+}
+void ApplicationController::generatorLayoutKeys(uint32_t keys, uint32_t now) {
+    if (!layoutKeys(keys, generatorLayout_, prefs_.generatorArrangement, now)) return;
+    if (generatorLayoutFromSettings_) { // Back to its row in Settings / Display.
+        panel_ = Panel::None; state_.settingsOpen = true;
+        navigator_.reset(settingsMenu_.selected());
+        showSettings();
+        return;
+    }
+    generatorEditor_.begin(data_.generator().settings(), false); // Back to its row in PARAMETERS.
+    openPanel(Panel::Generator, generatorEditor_);
+    for (unsigned i = 0; i < generatorEditor_.count(); ++i)
+        if (generatorEditor_.row(i) == ui::GeneratorEditor::Row::Layout) navigator_.reset(i);
+    view_.properties(generatorEditor_, navigator_);
 }
 // The DMM's LAYOUT edits the order of the face shown when it opened (digital or analog).
 void ApplicationController::openMeterLayout() {

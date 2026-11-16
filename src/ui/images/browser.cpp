@@ -23,7 +23,7 @@ void ImageBrowserView::list(lv_obj_t *parent,const Theme &theme,const ImageList 
         return;
     }
     for (unsigned i=0;i<images.visible && i<ImageList::Rows;++i)
-        MenuRow(parent,32+i*26,24,images.names[i],"",images.first+i==images.selected,theme,theme.accent); // Five within the 170 px menu.
+        MenuRow(parent,32+i*26,24,images.names[i],"",images.first+i==images.selected,theme,theme.accent); // Five within the menu (ScreenLayout::MenuHeight).
 }
 void ImageBrowserView::preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize, const char *keys) {
     lv_obj_clean(parent);

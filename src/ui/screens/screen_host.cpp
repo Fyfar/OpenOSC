@@ -103,6 +103,7 @@ void ScreenHost::activate(MeasurementMode mode) {
     buttons(theme.elements[unsigned(mode)][unsigned(ElementId::Parameters)].y);
     paintScope();
     if (mode == MeasurementMode::Oscilloscope) placeScope();
+    if (mode == MeasurementMode::Generator) placeGenerator();
     parameters_.palette(theme, theme.elements[unsigned(mode)][unsigned(ElementId::Parameters)]);
     lv_obj_set_hidden(root_, false);
 }
@@ -161,6 +162,38 @@ void ScreenHost::placeScope() {
     lv_obj_set_hidden(elements_.get(ElementId::Parameters), false);
     lv_obj_set_hidden(elements_.get(ElementId::Details), true); // Compact's scale line: the Scale and Position zones say it.
 }
+void ScreenHost::generatorArrangement(const GeneratorArrangement &order) {
+    if (!order.valid() || order == generatorOrder_) return;
+    generatorOrder_ = order;
+    if (root_ && mode_ == MeasurementMode::Generator && !overlay_) placeGenerator();
+}
+// The generator's blocks at the order's spans, in every preset (Legacy shows the preview and the
+// keys too): the frequency block's title, digits, unit and Applied rows at fixed offsets in it, each
+// within it; the preview the whole preview block. A theme's x, widths, fonts and colours stay; its
+// y and the keys' theme y give way to the order.
+void ScreenHost::placeGenerator() {
+    ScreenLayout::generator(generatorOrder_, generatorSpans_);
+    const auto *t = theme().elements[unsigned(MeasurementMode::Generator)];
+    const auto &frequency = generatorSpans_[unsigned(GeneratorBlock::Frequency)], &preview = generatorSpans_[unsigned(GeneratorBlock::Preview)];
+    const auto place = [&](ElementId id, int y, int height) {
+        auto *object = elements_.get(id);
+        const auto &style = t[unsigned(id)];
+        lv_obj_set_pos(object, style.x, y);
+        lv_obj_set_size(object, style.width, height);
+        lv_obj_set_hidden(object, false);
+    };
+    const auto in = [&](ElementId id, int offset) { // The theme's height, never past the block's end.
+        const int y = frequency.y + offset;
+        place(id, y, std::min<int>(t[unsigned(id)].height, frequency.bottom() + 1 - y));
+    };
+    in(ElementId::Details, ScreenLayout::GeneratorTitle);
+    in(ElementId::Reading, ScreenLayout::GeneratorDigits);
+    in(ElementId::Unit, ScreenLayout::GeneratorUnit);
+    in(ElementId::Measurements, ScreenLayout::GeneratorApplied);
+    place(ElementId::Preview, preview.y, preview.height);
+    buttons(generatorSpans_[unsigned(GeneratorBlock::Buttons)].y);
+    lv_obj_set_hidden(elements_.get(ElementId::Parameters), false);
+}
 void ScreenHost::overlay(bool parameters) {
     overlay_ = true;
     lv_obj_set_hidden(meterPanel_, true); // A menu over the DMM: no dial work underneath it.
@@ -170,6 +203,6 @@ void ScreenHost::overlay(bool parameters) {
         const auto id = ElementId(i);
         lv_obj_set_hidden(elements_.get(id), id != ElementId::Status && !(parameters && id == ElementId::Parameters));
     }
-    if (parameters) buttons(22); // Over a menu: the same bar, at the top under the status bar.
+    if (parameters) buttons(ScreenLayout::MenuKeysY); // Over a menu: the same bar, at the bottom over the keys.
 }
 } // namespace openosc::ui

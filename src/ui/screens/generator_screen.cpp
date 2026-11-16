@@ -9,13 +9,13 @@ constexpr const char *Shapes[] = {"Sine", "Square", "Triangle", "Half sine", "Po
 const char *shapeName(generator::Shape shape) { return unsigned(shape) < 6 ? Shapes[unsigned(shape)] : "Invalid"; }
 } // namespace
 void GeneratorScreen::activate(const ApplicationState &) {
+    host_.elements().text(ElementId::Details, "SET FREQUENCY"); // The frequency block's title, also on a rebuilt view.
     if (shown_) { update(snapshot_); return; } // The output as it is: never a placeholder OFF while ON.
     cards(); // Nothing shown yet: "--" and OFF.
     host_.parameters().select(1);
     host_.status("OFF", StatusTone::Neutral);
     host_.elements().text(ElementId::Reading, "--");
     host_.elements().text(ElementId::Unit, "Hz");
-    host_.elements().text(ElementId::Details, "SET FREQUENCY");
     host_.elements().text(ElementId::Measurements, "");
 }
 // F1 Wave, F2 Frequency (Unit in FREQUENCY: Hz/kHz/MHz), F3 Params, F4 Back from the list or Cancel
@@ -60,13 +60,7 @@ void GeneratorScreen::update(const generator::Snapshot &snapshot) {
         plot::Format::quantity(snapshot.applied.actualHz.value(), "Hz", applied, sizeof applied);
     std::snprintf(text, sizeof text, "Applied %s", applied);
     elements.text(ElementId::Measurements, text);
-    const char *name = shapeName(snapshot.requested.shape);
-    if (host_.theme().layout == LayoutPreset::Legacy) {
-        char described[48];
-        generator::LevelText::describe(snapshot.requested, described, sizeof described);
-        std::snprintf(text, sizeof text, "%s, %s", name, described);
-        elements.text(ElementId::Measurements, text);
-    }
+    // Every preset alike: Applied in the frequency block, the level line under the preview's curve.
     snapshot_ = snapshot; shown_ = true;
     cards();
     host_.preview().update(snapshot.requested,

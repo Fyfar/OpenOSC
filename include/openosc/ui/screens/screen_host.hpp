@@ -29,6 +29,10 @@ public:
     void scopeArrangement(const ScopeArrangement &order);
     const ScopeArrangement &scopeArrangement() const { return scopeOrder_; }
     const BlockSpan &scopeSpan(ScopeBlock block) const { return scopeSpans_[unsigned(block)]; }
+    // The generator's block order (ScreenLayout::generator), the same way: at once when it shows.
+    void generatorArrangement(const GeneratorArrangement &order);
+    const GeneratorArrangement &generatorArrangement() const { return generatorOrder_; }
+    const BlockSpan &generatorSpan(GeneratorBlock block) const { return generatorSpans_[unsigned(block)]; }
     // The soft keys at `y` (x, width and height are ScreenLayout's, the same on every screen).
     void buttons(int y);
     void overlay(bool parameters);
@@ -56,6 +60,7 @@ public:
 private:
     void placeStatus();
     void placeScope(); // The Scope's blocks at their spans for scopeOrder_.
+    void placeGenerator(); // The generator's blocks at their spans for generatorOrder_.
     void paintScope(); // The Scope's colours from theme(): waveform, footer, chrome.
     lv_obj_t *root_ = nullptr, *chrome_ = nullptr, *meterPanel_ = nullptr;
     int statusX_ = StatusBarLayout::StatusX, statusWidth_ = 0, statusRight_ = 0;
@@ -63,6 +68,8 @@ private:
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;
     ScopeArrangement scopeOrder_;
     BlockSpan scopeSpans_[ScopeArrangement::Size];
+    GeneratorArrangement generatorOrder_;
+    BlockSpan generatorSpans_[GeneratorArrangement::Size];
     const Theme *theme_ = nullptr, *scopeTheme_ = nullptr;
     const ScopeLook *scopeLook_ = nullptr;
     Elements elements_;

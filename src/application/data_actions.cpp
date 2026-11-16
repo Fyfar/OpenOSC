@@ -162,6 +162,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::MeterAppearance: meterAppearanceKeys(keys, now); break;
     case Panel::MeterLayout: meterLayoutKeys(keys, now); break;
     case Panel::ScopeLayout: scopeLayoutKeys(keys, now); break;
+    case Panel::GeneratorLayout: generatorLayoutKeys(keys, now); break;
     case Panel::ScopeColors: scopeColorsKeys(keys, now); break;
     case Panel::Analyze: analyzeKeys(keys, now); break;
     case Panel::Channel:

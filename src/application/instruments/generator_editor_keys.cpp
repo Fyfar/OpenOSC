@@ -13,7 +13,11 @@ void ApplicationController::generatorEditorKeys(uint32_t keys, uint32_t now) {
 }
 void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
     if (switchGeneratorPanel(keys, now)) return;
-    if (fieldKeys(keys, generatorEditor_, now) != FieldKey::Committed) return;
+    const auto key = fieldKeys(keys, generatorEditor_, now);
+    if (key == FieldKey::Action && generatorEditor_.row(navigator_.row()) == ui::GeneratorEditor::Row::Layout) {
+        openGeneratorLayout(false); return;
+    }
+    if (key != FieldKey::Committed) return;
     if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify("Unsupported waveform/frequency/duty", now);
     generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave());
     view_.properties(generatorEditor_, navigator_);

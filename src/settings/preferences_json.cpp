@@ -1,4 +1,5 @@
 #include "openosc/settings/preferences_json.hpp"
+#include "openosc/settings/arrangement_json.hpp"
 #include "openosc/settings/json_input.hpp"
 #include "openosc/settings/instrument_json.hpp"
 #include <ArduinoJson.h>
@@ -133,6 +134,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (index==2) return false;
         candidate.generatorStartup=index;
     }
+    arrangement(generator, "arrangement", candidate.generatorArrangement); // Missing or damaged: the default.
     if (generator.containsKey("last_output")) {
         if (!generator["last_output"].is<bool>()) return false;
         candidate.generatorLastOutput=generator["last_output"].as<bool>();
@@ -179,6 +181,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["generator"]["square_drive"] = generatorDrives[values.generatorSquareDrive];
     document["generator"]["startup_output"] = generatorStartups[values.generatorStartup];
     document["generator"]["last_output"] = bool(values.generatorLastOutput);
+    arrangement(document["generator"].as<JsonObject>(), "arrangement", values.generatorArrangement);
     document["generator"]["minimum_code"] = values.generatorMinimumCode;
     document["generator"]["maximum_code"] = values.generatorMaximumCode;
     if (document.overflowed()) return 0;

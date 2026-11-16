@@ -9,8 +9,9 @@ namespace {
 using Caps = generator::Capabilities;
 using Row = GeneratorEditor::Row;
 constexpr Row WaveRows[] = {Row::Shape, Row::Duty, Caps::Levels ? Row::Level : Row::Amplitude, Row::Frequency};
-constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::Drive, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency};
-constexpr Row ModuleParameters[] = {Row::Duty, Row::Amplitude, Row::Preset, Row::Frequency};
+// Layout last: the screen's block order (GENERATOR LAYOUT), not a setting of the output.
+constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::Drive, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency, Row::Layout};
+constexpr Row ModuleParameters[] = {Row::Duty, Row::Amplitude, Row::Preset, Row::Frequency, Row::Layout};
 constexpr auto Presets = GeneratorEditor::Presets;
 constexpr unsigned PresetCount = GeneratorEditor::PresetCount;
 // The reference has a place only where main OUTPUT had one: the ZT703S DAC/PWM jack.
@@ -33,11 +34,12 @@ PropertyKind GeneratorEditor::kind(unsigned index) const {
     case Row::Duty: return Caps::duty(draft_.settings.shape) ? PropertyKind::Number : PropertyKind::Info;
     case Row::Amplitude: case Row::MinimumCode: case Row::MaximumCode: return PropertyKind::Number;
     case Row::Frequency: return PropertyKind::Info; // Set in the frequency editor.
+    case Row::Layout: return PropertyKind::Action;  // MENU opens GENERATOR LAYOUT.
     }
     return PropertyKind::Info;
 }
 void GeneratorEditor::name(unsigned index, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency", "Square out"};
+    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency", "Square out", "Layout"};
     std::snprintf(output, capacity, "%s", names[unsigned(row(index))]);
 }
 unsigned GeneratorEditor::options(unsigned index) const {
@@ -156,6 +158,7 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
     case Row::Preset:
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", output, capacity);
         return;
+    case Row::Layout: std::snprintf(output, capacity, ">"); return;
     case Row::Drive: // The choice, then the path it gives at this frequency (or the path of any other output).
         if (drives(draft_.settings))
             std::snprintf(output, capacity, "%s, now %s", generator::Levels::DriveNames[unsigned(draft_.settings.squareDrive) & 1],

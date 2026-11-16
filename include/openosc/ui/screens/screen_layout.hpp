@@ -21,6 +21,10 @@ public:
     // The soft keys: the same bar wherever Buttons stands, four equal 76 px zones 4 px apart.
     static constexpr int ButtonsX = 2, ButtonsWidth = 316, ButtonsHeight = 32, ButtonGap = 4;
     static constexpr int ButtonWidth = (ButtonsWidth - 3 * ButtonGap) / 4;
+    // A menu or panel over a screen: the keys' bar at the bottom, right over the physical keys, in
+    // every screen order; the menu between the status bar and it (y 22..203).
+    static constexpr int MenuKeysY = Bottom - ButtonsHeight, MenuTop = Top + 2, MenuGap = 4;
+    static constexpr int MenuHeight = MenuKeysY - MenuGap - MenuTop;
     // Scope: the readouts row (ScopeFooter, as high as the status bar) and the waveform object:
     // its marker margin above the 156-row plot (PlotFrame::Top), nothing below it.
     static constexpr int Readouts = ScopeFooterLayout::Height, PlotHeight = 156, Waveform = plot::PlotFrame::Top + PlotHeight;
@@ -33,6 +37,11 @@ public:
     static constexpr int DigitalMeasurements = 89, DigitalMeterNoStatistics = 50;
     static constexpr int MetaRow = 14, DialOffset = 9, DialHeight = 92, AnalogDial = DialOffset + DialHeight;
     static constexpr int AnalogMeasurements = 14, AnalogReading = 62;
+    // The generator: the frequency block is its title row, the digits with their unit and the
+    // Applied row (offsets from the block's top, from the default theme's 66..175); the preview
+    // keeps its curve and its level line (GeneratorPreview needs 60 for both).
+    static constexpr int GeneratorTitle = 0, GeneratorDigits = 18, GeneratorUnit = 37, GeneratorApplied = 77;
+    static constexpr int GeneratorFrequency = 110, GeneratorPreview = 68;
 
     template<class Block>
     static void stack(const BlockOrder<Block> &order, const int (&heights)[BlockOrder<Block>::Size],
@@ -65,13 +74,19 @@ public:
         const int heights[] = {DigitalReading, statistics ? DigitalMeasurements : DigitalMeterNoStatistics, ButtonsHeight};
         stack(order, heights, spans);
     }
+    static void generator(const GeneratorArrangement &order, BlockSpan (&spans)[GeneratorArrangement::Size]) {
+        const int heights[] = {GeneratorFrequency, GeneratorPreview, ButtonsHeight};
+        stack(order, heights, spans);
+    }
     static void analog(const AnalogArrangement &order, bool statistics, BlockSpan (&spans)[AnalogArrangement::Size]) {
         const int heights[] = {AnalogDial, statistics ? AnalogMeasurements : 0, AnalogReading, ButtonsHeight};
         stack(order, heights, spans);
     }
 };
 static_assert(ScreenLayout::ButtonWidth == 76, "four equal 76 px zones");
+static_assert(ScreenLayout::MenuKeysY == 208 && ScreenLayout::MenuTop + ScreenLayout::MenuHeight <= 204, "A menu ends above its keys");
 static_assert(ScreenLayout::Readouts + ScreenLayout::Waveform + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the Scope fits");
+static_assert(ScreenLayout::GeneratorFrequency + ScreenLayout::GeneratorPreview + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the generator fits");
 static_assert(ScreenLayout::DigitalReading + ScreenLayout::DigitalMeasurements + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "digital fits");
 static_assert(ScreenLayout::AnalogDial + ScreenLayout::AnalogMeasurements + ScreenLayout::AnalogReading + ScreenLayout::ButtonsHeight <=
               ScreenLayout::Body, "analog fits");

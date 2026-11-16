@@ -15,6 +15,7 @@ constexpr SettingsEntry display[] = {
     {"Brightness", Action::Brightness},
     {"FPS counter", Action::ShowFps},
     {"Battery", Action::BatteryDisplay},
+    {"Generator layout", Action::GeneratorLayout},
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
 };

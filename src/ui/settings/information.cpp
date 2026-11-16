@@ -22,7 +22,7 @@ void SettingsView::information(const SettingsMenu &menu, const DeviceInfo &info)
     text(info.storageReady ? "FAT: Mounted" : "FAT: Unavailable", 12, 104);
     if (info.storageReady) {
         std::snprintf(value, sizeof value, "Free: %lu KiB", static_cast<unsigned long>(info.freeBytes / 1024));
-        text(value, 12, 128); // Within the 170 px menu under the cards.
+        text(value, 12, 128); // Within the menu above the cards.
     }
 }
 } // namespace openosc::ui

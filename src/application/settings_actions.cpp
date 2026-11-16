@@ -55,6 +55,7 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
     }
     case Outcome::Activate:
         if (settingsMenu_.current().action == ui::SettingsAction::Back) { if (!back()) return; }
+        else if (settingsMenu_.current().action == ui::SettingsAction::GeneratorLayout) { openGeneratorLayout(true); return; } // A panel, not an action.
         else settingsAction(settingsMenu_.current().action, now);
         break;
     case Outcome::Changed: // A committed field; the interleave offset's edit puts it in force (not saved).

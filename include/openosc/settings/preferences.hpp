@@ -23,6 +23,7 @@ struct Preferences {
     // Startup output (GeneratorStartup): 0 off after power-up, 1 restore the last confirmed state;
     // generatorLastOutput is that state (1 on).
     uint32_t generatorStartup = 0, generatorLastOutput = 0;
+    GeneratorArrangement generatorArrangement; // The main GEN screen's blocks (default: frequency, preview, buttons).
     uint32_t generatorAmplitudeMillivolts = 3000; // ZT706S module; ZT703S keeps level/codes.
     ScopePreferences scope;
     MeterPreferences meter;
@@ -39,7 +40,7 @@ struct Preferences {
                generatorDutyPermille <= generator::Capabilities::MaximumDutyPermille &&
                generatorAmplitudeMillivolts <= generator::Capabilities::amplitudeLimitMillivolts(generator::Shape(generatorShape), generatorMillihertz) &&
                (!generator::Capabilities::AmplitudeStepMillivolts || !(generatorAmplitudeMillivolts % (generator::Capabilities::AmplitudeStepMillivolts ? generator::Capabilities::AmplitudeStepMillivolts : 1))) &&
-               generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorMinimumCode<=generatorMaximumCode &&
+               generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorArrangement.valid() && generatorMinimumCode<=generatorMaximumCode &&
                generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() &&
                scope::SamplePlan::calculate(timebaseNs,
                     scope::RecordBudget::perChannel(scope.recordPoints,scope::RecordBudget::channels(scope.enabled[0],scope.enabled[1])),

@@ -26,7 +26,7 @@ int SettingsView::menu(const SettingsMenu &menu, const SettingsProperties &rows,
         : menu.page() == SettingsPage::Gain ? "Volts at the probe tip, ratio once"
         : menu.page() == SettingsPage::Interleave ? "HIGH ADC offset, new CH1 records" : nullptr;
     if (header) { text(header, 10, 46, 282); firstY = 68; }
-    // Four rows within the 170 px menu under the cards, also under a header line (68 + 4 x 24 = 164).
+    // Four rows within the menu above the cards, also under a header line (68 + 4 x 24 = 164).
     const PropertyRows page{firstY, 24, 22, 4};
     if (menu.count() > page.visible) {
         char counter[24];

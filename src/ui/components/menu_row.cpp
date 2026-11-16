@@ -84,7 +84,7 @@ void MenuRow::slider(unsigned value, unsigned minimum, unsigned maximum) {
     lv_obj_set_hidden(value_, true);
     if (!slider_) slider_=lv_slider_create(root_);
     auto *control=slider_; lv_obj_set_hidden(control,false);
-    lv_obj_set_size(control, 86, 5);
+    lv_obj_set_size(control, SliderWidth, 5);
     lv_obj_set_grid_cell(control, LV_GRID_ALIGN_END, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_slider_set_range(control, minimum, maximum);
     lv_slider_set_value(control, value, LV_ANIM_OFF);
@@ -95,16 +95,25 @@ void MenuRow::slider(unsigned value, unsigned minimum, unsigned maximum) {
     }
     lv_obj_set_style_pad_all(control, 3, LV_PART_KNOB);
 }
-// The row's content box is its width less 7 px of padding each side; samples sit centred in height.
+int MenuRow::contentWidth() const {
+    return width_ - 2 * lv_obj_get_style_border_width(root_, LV_PART_MAIN) - lv_obj_get_style_pad_left(root_, LV_PART_MAIN) -
+           lv_obj_get_style_pad_right(root_, LV_PART_MAIN);
+}
+int MenuRow::contentHeight() const {
+    return height_ - 2 * lv_obj_get_style_border_width(root_, LV_PART_MAIN) - lv_obj_get_style_pad_top(root_, LV_PART_MAIN) -
+           lv_obj_get_style_pad_bottom(root_, LV_PART_MAIN);
+}
+// Samples sit centred in the content box's height (where the texts are centred too), the name's at
+// its left before the name, the value's Gap before the value text or the slider, whatever its length.
 void MenuRow::nameSwatch(uint32_t rgb) {
     if (!root_) return;
-    nameSwatch_.update(root_, 0, (height_ - ColorSwatch::Size) / 2, rgb, ink_);
+    nameSwatch_.update(root_, 0, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_);
     lv_obj_set_style_pad_left(name_, ColorSwatch::Size + ColorSwatch::Gap, 0);
 }
 void MenuRow::valueSwatch(uint32_t rgb) {
     if (!root_) return;
     const bool slid = slider_ && !lv_obj_is_hidden(slider_);
-    const int right = slid ? 86 : lv_obj_is_hidden(value_) ? 0 : valueWidth_;
-    valueSwatch_.update(root_, width_ - 14 - right - ColorSwatch::Gap - ColorSwatch::Size, (height_ - ColorSwatch::Size) / 2, rgb, ink_);
+    const int right = slid ? SliderWidth : lv_obj_is_hidden(value_) ? 0 : valueWidth_;
+    valueSwatch_.update(root_, contentWidth() - right - ColorSwatch::Gap - ColorSwatch::Size, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_);
 }
 } // namespace openosc::ui

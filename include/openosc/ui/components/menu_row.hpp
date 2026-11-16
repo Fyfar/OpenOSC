@@ -6,6 +6,7 @@ namespace openosc::ui {
 // Hardware keys edit the model; these native LVGL controls display its state.
 class MenuRow {
 public:
+    static constexpr int SliderWidth = 86;
     MenuRow() = default;
     void update(lv_obj_t *parent, int y, int height, const char *name, const char *value,
                 bool selected, const Theme &theme, uint32_t accent, int x = 6, int width = 290);
@@ -18,8 +19,14 @@ public:
     // row; left of its slider when it has one), framed in the row's text colour. update() hides both.
     void nameSwatch(uint32_t rgb);
     void valueSwatch(uint32_t rgb);
+    lv_obj_t *root() const { return root_; }                          // Tests: the row's box,
+    lv_obj_t *swatch(bool value) const { return value ? valueSwatch_.object() : nameSwatch_.object(); } // its samples.
 
 private:
+    // The row's content box (its size less its border and padding): LVGL places a child, the
+    // samples too, from its top left corner.
+    int contentWidth() const;
+    int contentHeight() const;
     lv_obj_t *root_ = nullptr, *name_ = nullptr, *value_ = nullptr;
     lv_obj_t *toggle_ = nullptr, *slider_ = nullptr;
     ColorSwatch nameSwatch_, valueSwatch_;

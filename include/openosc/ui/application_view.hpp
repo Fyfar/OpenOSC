@@ -43,6 +43,9 @@ public:
     // statistics stay); the same order is a no-op; an invalid order is ignored. Applied at once when
     // that screen shows, else when it is next activated.
     void scopeArrangement(const ScopeArrangement &order) { host_.scopeArrangement(order); }
+    void generatorArrangement(const GeneratorArrangement &order) { host_.generatorArrangement(order); }
+    const GeneratorArrangement &generatorArrangement() const { return host_.generatorArrangement(); }
+    const ui::BlockSpan &generatorSpan(GeneratorBlock block) const { return host_.generatorSpan(block); } // Tests.
     void meterArrangement(const DigitalArrangement &digital, const AnalogArrangement &analog) {
         meter_.arrangement(digital, analog, mode_ == MeasurementMode::Multimeter && !host_.overlayActive());
     }
@@ -92,6 +95,7 @@ public:
     void images(const ui::ImageList &images);
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
     void notify(const char *text, uint32_t now);
+    lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
     void powerHold(int percent) { powerHold_.show(percent); } // PowerHold::percent; -1 hides.
     void service(uint32_t now);
@@ -102,7 +106,7 @@ private:
     }
     static const lv_font_t *font(unsigned size) { return ui::Elements::font(size); }
     void menuFrame(const char *title, bool instrument = false, bool retained = false);
-    static constexpr int MenuTop = 62, MenuHeight = 170; // Under the cards (22..53), above the bottom.
+    static constexpr int MenuTop = ui::ScreenLayout::MenuTop, MenuHeight = ui::ScreenLayout::MenuHeight; // Above the cards.
     void choice(const ui::PropertyList &list, const ui::PropertyNavigator &navigator, int top); // The open list, if any.
     ui::ChoicePopup choicePopup_;
     ui::GeneratorPreview draftPreview_;

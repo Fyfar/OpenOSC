@@ -173,6 +173,10 @@ private:
     // and saved at once and only restyles the screen (applyLooks); the capture, HOLD, the record,
     // the DMM statistics and the measurement settings are untouched. Back: the parent panel.
     void scopeLayoutKeys(uint32_t keys, uint32_t now);
+    // GENERATOR LAYOUT, one editor from Settings / Display and from GEN Parameters (F3); Back returns
+    // to where it opened. A committed order is saved and placed at once, or when GEN shows next.
+    void openGeneratorLayout(bool fromSettings);
+    void generatorLayoutKeys(uint32_t keys, uint32_t now);
     void scopeColorsKeys(uint32_t keys, uint32_t now);
     void meterLayoutKeys(uint32_t keys, uint32_t now);
     template<class Block> bool layoutKeys(uint32_t keys, ui::ArrangementProperties<Block> &editor, BlockOrder<Block> &field, uint32_t now);
@@ -204,7 +208,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, Confirmation, Images, Zero };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;
@@ -250,6 +254,8 @@ private:
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
     ui::ArrangementProperties<ScopeBlock> scopeLayout_;
+    ui::ArrangementProperties<GeneratorBlock> generatorLayout_;
+    bool generatorLayoutFromSettings_ = false; // Where Back returns: Settings / Display, or GEN Parameters.
     ui::ArrangementProperties<DigitalBlock> digitalLayout_;
     ui::ArrangementProperties<AnalogBlock> analogLayout_;
     bool meterLayoutAnalog_ = false; // Which DMM order the open LAYOUT edits (the face shown when it opened).

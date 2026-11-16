@@ -12,6 +12,7 @@ public:
     void update(lv_obj_t *parent, int x, int y, uint32_t rgb, uint32_t frame);
     void hide() { if (box_) lv_obj_set_hidden(box_, true); }
     void reset() { box_ = nullptr; } // Its parent was cleaned.
+    lv_obj_t *object() const { return box_; }
 private:
     lv_obj_t *box_ = nullptr;
 };

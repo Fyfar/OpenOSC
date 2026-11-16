@@ -10,6 +10,9 @@ namespace openosc {
 enum class ScopeBlock : uint8_t { Measurements, Waveform, Buttons, Count };
 enum class DigitalBlock : uint8_t { Reading, Measurements, Buttons, Count }; // DMM digital faces.
 enum class AnalogBlock : uint8_t { Dial, Measurements, Reading, Buttons, Count }; // DMM analog dial.
+// The generator's main screen: the set frequency (title, digits, unit, Applied), the preview (the
+// waveform and its level line), the soft keys.
+enum class GeneratorBlock : uint8_t { Frequency, Preview, Buttons, Count };
 
 // A block's menu name and its file key (JSON).
 struct ArrangementBlockInfo { const char *name, *key; };
@@ -19,6 +22,9 @@ template<> struct ArrangementBlocks<ScopeBlock> {
 };
 template<> struct ArrangementBlocks<DigitalBlock> {
     static constexpr ArrangementBlockInfo Info[] = {{"Reading", "reading"}, {"Measurements", "measurements"}, {"Buttons", "buttons"}};
+};
+template<> struct ArrangementBlocks<GeneratorBlock> {
+    static constexpr ArrangementBlockInfo Info[] = {{"Frequency", "frequency"}, {"Preview", "preview"}, {"Buttons", "buttons"}};
 };
 template<> struct ArrangementBlocks<AnalogBlock> {
     static constexpr ArrangementBlockInfo Info[] = {{"Dial", "dial"}, {"Measurements", "measurements"}, {"Reading", "reading"}, {"Buttons", "buttons"}};
@@ -96,4 +102,5 @@ private:
 using ScopeArrangement = BlockOrder<ScopeBlock>;
 using DigitalArrangement = BlockOrder<DigitalBlock>;
 using AnalogArrangement = BlockOrder<AnalogBlock>;
+using GeneratorArrangement = BlockOrder<GeneratorBlock>;
 } // namespace openosc
