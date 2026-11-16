@@ -28,12 +28,28 @@ Captured on a ZT703S running OpenOSC.
 
 <table>
   <tr>
-    <td><img src=".github/images/scope.png" width="320" alt="Oscilloscope: 10 MHz square wave on both channels with frequency and period readouts"></td>
-    <td><img src=".github/images/multimeter.png" width="320" alt="Multimeter: millivolts with MIN/MAX/AVG statistics and bar graph"></td>
+    <td><img src=".github/images/scope.png" width="320" alt="Oscilloscope: 20 kHz and 40 kHz square waves with frequency, duty and period readouts, soft-keys at the bottom"></td>
+    <td><img src=".github/images/multimeter.png" width="320" alt="Multimeter: AC voltage RMS with MIN/MAX/AVG statistics and bar graph"></td>
   </tr>
   <tr>
-    <td align="center">Oscilloscope: 10 MHz on both channels</td>
+    <td align="center">Oscilloscope, two channels</td>
     <td align="center">Multimeter with statistics</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: dial with REL reference and statistics"></td>
+    <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency editor and waveform preview"></td>
+  </tr>
+  <tr>
+    <td align="center">Multimeter, analog view</td>
+    <td align="center">Signal generator</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/scheme-daylight.png" width="320" alt="Oscilloscope with the Daylight color scheme"></td>
+    <td><img src=".github/images/scheme-amber.png" width="320" alt="Oscilloscope with the Amber color scheme"></td>
+  </tr>
+  <tr>
+    <td align="center">Daylight color scheme</td>
+    <td align="center">Amber color scheme</td>
   </tr>
   <tr>
     <td><img src=".github/images/fft.png" width="320" alt="FFT, Blackman window, 2048 points, with frequency cursors"></td>
@@ -42,14 +58,6 @@ Captured on a ZT703S running OpenOSC.
   <tr>
     <td align="center">FFT with cursors</td>
     <td align="center">XY mode</td>
-  </tr>
-  <tr>
-    <td><img src=".github/images/auto-setup.png" width="320" alt="Auto setup: range and timebase selected automatically for a 1 kHz square wave"></td>
-    <td><img src=".github/images/generator.png" width="320" alt="Signal generator: square wave, frequency and duty cycle"></td>
-  </tr>
-  <tr>
-    <td align="center">Auto setup</td>
-    <td align="center">Signal generator</td>
   </tr>
 </table>
 
