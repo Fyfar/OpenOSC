@@ -4,10 +4,13 @@
 
 namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
-    // AUTO/RANGE short press: the factory's 20 20 (703S 08044274, 706S 08044BE4): AUTO -> Manual, then
-    // the next range. Its hold returns to AUTO (onKeys).
-    if ((keys & Keypad::AutoRange) && !meterCommand(data_.advanceDmmRange())) view_.notify("Range command busy", now);
-    if ((keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
+    // AUTO/RANGE short release: the stroke its press opened ends with 21 21 (703S 080442B8, 706S
+    // 08044C28): AUTO -> Manual, then the next range. No open stroke (refused at the press, a wake):
+    // nothing. A function without ranges (diode, continuity, no reading yet; DataAccess::dmmRanged):
+    // the range keys are ignored, nothing sent, nothing said.
+    const bool ranged = data_.dmmRanged();
+    if (ranged && (keys & Keypad::AutoRange)) data_.releaseDmmRange();
+    if (ranged && (keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
         !meterCommand(data_.stepDmmRange(keys & Keypad::Up ? 1 : -1)))
         view_.notify("Range command busy", now);
     if (keys & (Keypad::Left | Keypad::Right)) {
@@ -34,9 +37,20 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !meterCommand(data_.sendDmmGroup(group)))
         view_.notify("Measurement command busy", now);
 }
-// AUTO/RANGE hold: the factory's 22 22 after ~2 s (703S 0804423C, 706S 08044BAC): AUTO again.
-void ApplicationController::meterRangeHold(uint32_t now) {
-    if (!meterCommand(data_.setDmmAuto(true))) view_.notify("Range command busy", now);
+// AUTO/RANGE qualified press (~50 ms): the factory's 20 20 (703S 08044274, 706S 08044BE4) opens the
+// stroke; busy: said once here, its release and hold then do nothing. Not on another screen or panel,
+// in Remote or without ranges.
+bool ApplicationController::meterRangeContext() const {
+    return !remote_ && uiReady_ && panel_ == Panel::None && !state_.settingsOpen && state_.mode == MeasurementMode::Multimeter;
+}
+void ApplicationController::meterRangePress(uint32_t now) {
+    if (!meterRangeContext() || !data_.dmmRanged()) return;
+    if (!meterCommand(data_.pressDmmRange())) view_.notify("Range command busy", now);
+}
+// AUTO/RANGE hold: the factory's 22 22 after ~2 s (703S 0804423C, 706S 08044BAC) ends the open stroke,
+// AUTO again; no 21 follows. Without an open stroke, or without ranges, nothing.
+void ApplicationController::meterRangeHold(uint32_t) {
+    if (data_.dmmRanged()) data_.holdDmmRange();
 }
 // The DMM panel as the instrument and the preferences have it now.
 ui::MeterProperties ApplicationController::meterProperties() const {

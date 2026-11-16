@@ -17,7 +17,7 @@
 #include "openosc/measurement/dmm/packet.hpp"
 #include "openosc/measurement/dmm/uart_dma.hpp"
 #include "openosc/measurement/dmm/function.hpp"
-#include "openosc/measurement/dmm/key_command.hpp"
+#include "openosc/measurement/dmm/meter_commands.hpp"
 #include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/calibration/zero_operation.hpp"
 #include "openosc/calibration/zero_file.hpp"
@@ -113,7 +113,21 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool scopeWaiting() const { return triggerWaiting_; }
     bool sendDmmGroup(dmm::CommandGroup group);
     bool selectDmmFunction(dmm::Function function);
-    bool advanceDmmRange();
+    // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
+    // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
+    bool dmmRanged() const { return dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
+    // The physical AUTO/RANGE key as the factory's KEY5 (dmm::RangeStroke): its qualified press sends
+    // 20 20 and opens the stroke (a NextRange command, refused while busy); the short release ends it
+    // with 21 21, the 2 s hold with 22 22 (the command becomes Auto). Without an open stroke (its press
+    // refused or taken by a wake) release and hold do nothing. A press needs a fresh reading of this DMM
+    // session (MeterCommands::FreshUs). closeDmmRange: the context took the key (a panel, Remote, an input
+    // overflow): the open stroke ends with its 21, its command cancelled, never confirmed.
+    bool pressDmmRange();
+    bool releaseDmmRange();
+    bool holdDmmRange();
+    bool dmmRangeOpen() const { return dmm_.rangeOpen(); }
+    void closeDmmRange();
+    // Auto: a synthetic hold (20, 22 HoldGapMs later); Manual: a synthetic short stroke (20, 21).
     bool setDmmAuto(bool automatic);
     // The manual HOLD (and the DMM's own, released by its key); off also ends a mode's cycle.
     bool holdMeter(bool held);
@@ -128,11 +142,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool stepDmmRange(int direction);
     bool serialMeter(bool enabled);
     const board::DmmSerialOutput &meterSerial() const { return serial_; }
-    bool dmmBusy() const { return dmmSelector_.busy() || dmmKey_.busy() || dmmRange_.busy(); }
-    DataStatus dmmCommandStatus() const {
-        return dmmOperation_ == DmmOperation::Key ? dmmKey_.status() : dmmOperation_ == DmmOperation::Range ? dmmRange_.status() : dmmSelector_.status();
-    }
-    DataStatus dmmSelectionStatus() const { return dmmSelector_.status(); }
+    bool dmmBusy() const { return dmm_.busy(); }
+    DataStatus dmmCommandStatus() const { return dmm_.status(); }
+    DataStatus dmmSelectionStatus() const { return dmm_.selectionStatus(); }
     bool recordScope(ScopeRecorder::Format format);
     ScopeRecorder &scopeRecorder() { return recorder_; }
     bool scopeRecording() const { return recordPending_ || recorder_.busy(); }
@@ -215,7 +227,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // The ZT706S module's OFF frame goes out first (bounded: ModuleLink::ExchangeMs). Ready also
     // when it was not acknowledged: power off, restart and Recovery do not hang on the module;
     // generatorOffConfirmed() says which, and the next boot sends OFF again.
-    bool shutdownReady() const { return stopping_ && !recorder_.busy() && !logger_.active() && !generator_.busy(); }
+    bool shutdownReady() const { return stopping_ && !dmmClosing_ && !recorder_.busy() && !logger_.active() && !generator_.busy(); }
     bool generatorOffConfirmed() const { return generator_.offConfirmed(); }
     DataStatus status() const { return status_; }
     uint64_t nowUs() const { return timeUs_; }
@@ -295,6 +307,13 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void serviceRolling(uint32_t now);
     bool validateScope(const ScopeRequest &request) const;
     bool requestDmmKey(dmm::KeyCommand::Action action);
+    // Shutdown with a stroke still owed (beginShutdown): its 21 goes before the UART stops, within
+    // DmmCloseMs; past that, or a UART fault, the commands are abandoned and the UART stops all the same.
+    void serviceDmmClose(uint32_t now);
+    void stopDmmUart();
+    static constexpr uint32_t DmmCloseMs = 500;
+    bool dmmClosing_ = false;
+    uint32_t dmmCloseDeadline_ = 0;
     PeripheralResources resources_;
     // Puts a changed calibration in force: a running capture restarts at once (both caches see the
     // offsets' generation; the description takes gain and interleave); in HOLD the next RUN does.
@@ -346,11 +365,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool busLoad_ = false, busAnnounced_ = false;
     dmm::PacketFramer framer_;
     dmm::Session meter_;
-    dmm::FunctionSelector dmmSelector_;
-    dmm::KeyCommand dmmKey_;
-    dmm::RangeSelector dmmRange_;
-    enum class DmmOperation { Function, Key, Range };
-    DmmOperation dmmOperation_ = DmmOperation::Function;
+    dmm::MeterCommands dmm_; // Every DMM command on uart_ (selector, keys, range, the AUTO/RANGE stroke).
     ScopeRecorder recorder_;
     DmmCsvLogger logger_;
     scope::FrameLease heldFrame_;

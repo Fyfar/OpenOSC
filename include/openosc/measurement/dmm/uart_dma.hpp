@@ -1,20 +1,20 @@
 #pragma once
-#include "openosc/measurement/dmm/session.hpp"
+#include "openosc/measurement/dmm/meter_commands.hpp"
 #include "openosc/platform/resources.hpp"
 #include <atomic>
 
 namespace openosc::dmm {
-class UartDma {
+class UartDma final : public CommandPort {
 public:
     explicit UartDma(PeripheralResources &resources) : resources_(resources) {}
     ~UartDma() { stop(); }
     bool start();
     bool stop();
     bool read(uint8_t &byte);
-    bool send(CommandGroup group, uint32_t nowMs);
+    bool send(CommandGroup group, uint32_t nowMs) override;
     void service(uint32_t nowMs);
     DataStatus status() const { return status_; }
-    DataStatus txStatus() const { return txStatus_; }
+    DataStatus txStatus() const override { return txStatus_; }
     uint32_t errors() const { return errors_; }
     uint32_t overflows() const { return overflows_; }
     static void uartInterrupt();

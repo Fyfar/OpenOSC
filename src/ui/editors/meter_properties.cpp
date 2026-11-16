@@ -1,4 +1,5 @@
 #include "openosc/ui/editors/meter_properties.hpp"
+#include "openosc/measurement/dmm/ranges.hpp"
 #include <cstdio>
 #include "openosc/ui/format/meter.hpp"
 #include "openosc/ui/components/meter_style.hpp"
@@ -6,6 +7,7 @@
 
 namespace openosc::ui {
 PropertyKind MeterProperties::kind(unsigned row) const {
+    if (row == Range && !ranged()) return PropertyKind::Info; // Diode, continuity: nothing to choose.
     switch (row) {
     case Range: case Display: case Colors: case Digits: return PropertyKind::Choice;
     case ResetStatistics: return PropertyKind::Action;
@@ -51,7 +53,8 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
     }
 }
 void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
-    if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
+    if (row == Range && !ranged()) std::snprintf(output, capacity, "None");
+    else if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
     else if (row == SerialOutput && jackBusy_) std::snprintf(output, capacity, "GEN on");
     else if (row == Hold) std::snprintf(output, capacity, "%s", dmm::HoldSettings::name(hold_));
     else PropertyList::value(row, output, capacity);
@@ -60,6 +63,7 @@ void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
 // instrument and reports what it could not apply.
 bool MeterProperties::choose(unsigned row, unsigned index) {
     if (index >= options(row)) return false;
+    if (row == Range && !ranged()) return false;
     switch (row) {
     case Range: result_.range = index ? dmm::RangeMode::Manual : dmm::RangeMode::Auto; break;
     case Display: display_ = index; break;
@@ -73,6 +77,7 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     }
     return true;
 }
+bool MeterProperties::ranged() const { return dmm::Ranges::selectable(dmm::Functions::identify(result_)); }
 bool MeterProperties::optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const {
     if (row != Colors || !theme_ || index >= MeterStyles::Schemes) return false;
     rgb = MeterStyles::palette(index, *theme_).background;

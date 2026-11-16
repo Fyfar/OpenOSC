@@ -87,7 +87,7 @@ DataStatus Session::status(uint64_t nowUs, uint64_t staleAfterUs) const {
     return displayed().primary.status;
 }
 bool Command::encode(CommandGroup group, uint8_t (&bytes)[2]) {
-    static constexpr uint8_t codes[] = {0x50, 0x40, 0x80, 0x60, 0x90, 0x10, 0x22, 0x20, 0x30};
+    static constexpr uint8_t codes[] = {0x50, 0x40, 0x80, 0x60, 0x90, 0x10, 0x22, 0x20, 0x30, 0x21};
     const unsigned index = static_cast<unsigned>(group);
     if (index >= sizeof codes)
         return false;

@@ -10,12 +10,14 @@ struct MeterRangeMemory {
     // Auto, or the manual range only in its own function. An unknown owner (older files), another
     // function or a function without ranges: nothing (the controller's state is then taken).
     static bool restores(const MeterPreferences &saved, uint32_t savedFunction, dmm::Function function, dmm::RangeMode reported) {
-        if (unsigned(function) != savedFunction || reported == dmm::RangeMode::Unknown) return false;
+        if (!dmm::Ranges::selectable(function) || unsigned(function) != savedFunction || reported == dmm::RangeMode::Unknown) return false;
         return saved.automatic || saved.rangeFunction == unsigned(function);
     }
     // A confirmed reading into the settings (only after a command or selection that succeeded: the
     // caller checks). True when they changed.
+    // A function without ranges (whatever bits its packet carries) changes nothing.
     static bool mirror(MeterPreferences &saved, dmm::Function function, const dmm::Result &result) {
+        if (!dmm::Ranges::selectable(function)) return false;
         if (result.range == dmm::RangeMode::Auto) {
             if (saved.automatic) return false;
             saved.automatic = 1; return true;

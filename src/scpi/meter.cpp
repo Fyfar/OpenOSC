@@ -1,11 +1,17 @@
 #include "openosc/scpi/engine.hpp"
 #include "openosc/data/decimal.hpp"
+#include "openosc/measurement/dmm/key_command.hpp"
+#include "openosc/measurement/dmm/range_stroke.hpp"
 #include <cstdio>
 #include <cstring>
 
 namespace openosc::scpi {
 static_assert(dmm::RangeSelector::DeadlineMs < Engine::OperationMs && dmm::FunctionSelector::DeadlineMs < Engine::OperationMs,
               "A DMM operation ends before the SCPI wait for it");
+// AUTO ON: its hold stroke (20, then 22 HoldGapMs later; each pair's transmission bounded at 100 ms by
+// UartDma) and the confirmation after the 22.
+static_assert(dmm::RangeStroke::HoldGapMs + 2 * 100 + dmm::KeyCommand::DeadlineMs < Engine::OperationMs,
+              "AUTO's factory hold and its confirmation end before the SCPI wait for it");
 namespace {
 struct FunctionName { dmm::Function function; const char *name, *command; };
 constexpr FunctionName functions[] = {

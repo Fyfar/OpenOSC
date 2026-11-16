@@ -2,6 +2,7 @@
 #include "openosc/platform/input.hpp"
 
 namespace openosc {
+static_assert(KeyGestures::PressKeys == Keypad::AutoRange, "press: AUTO/RANGE only");
 KeyEvents KeyGestures::poll(uint32_t keys, uint32_t now) {
     KeyEvents events;
     for (unsigned i = 0; i < sizeof buttons_ / sizeof *buttons_; ++i) {
@@ -21,6 +22,8 @@ KeyEvents KeyGestures::poll(uint32_t keys, uint32_t now) {
             b.down = b.candidate;
             if (b.down) {
                 b.pressedAt = now;
+                b.qualifyAt = b.changedAt + PressQualifyMs; // From the raw edge, as the factory's 50 ms.
+                b.qualified = false;
                 b.repeatAt = now + RepeatDelayMs;
                 b.emitted = false;
                 if (arrow && b.armed) {
@@ -40,6 +43,10 @@ KeyEvents KeyGestures::poll(uint32_t keys, uint32_t now) {
         if (arrow && b.down && pressed && b.armed && int32_t(now - b.repeatAt) >= 0) {
             events.repeat |= bit;
             b.repeatAt = now + RepeatPeriodMs; // No burst after a delayed poll.
+        }
+        if ((bit & PressKeys) && b.down && pressed && b.armed && !b.shortless && !b.qualified && int32_t(now - b.qualifyAt) >= 0) {
+            events.press |= bit;
+            b.qualified = true;
         }
         if (!arrow && b.down && pressed && b.armed && !b.emitted && now - b.pressedAt >= holdMs) {
             events.longPress |= bit;

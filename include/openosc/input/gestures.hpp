@@ -6,10 +6,14 @@ struct KeyEvents {
     uint32_t shortPress = 0;
     uint32_t longPress = 0;
     uint32_t repeat = 0;
+    // press: AUTO/RANGE (KeyGestures::PressKeys) held PressQualifyMs since its raw press edge, once per
+    // stroke, not for a stroke a wake took: the factory's slot1, the only non-empty one (KEY5: 20 20).
+    // Its release still gives short/long.
+    uint32_t press = 0;
 };
 class KeyGestures {
 public:
-    static constexpr uint32_t DebounceMs = 25, HoldMs = 1000;
+    static constexpr uint32_t DebounceMs = 25, HoldMs = 1000, PressQualifyMs = 50, PressKeys = 1U << 11; // Keypad::AutoRange.
     // REL/Power and AUTO/RANGE hold as the factory's KEY4/KEY5: four 500 ms intervals (703S 080459F4).
     static constexpr uint32_t LongHoldMs = 2000;
     // REL/Power: from the first interval (500 ms after the debounced press) the power-off progress
@@ -26,8 +30,8 @@ public:
     void holdOnly(uint32_t bit, uint32_t now);
 private:
     struct Button {
-        uint32_t changedAt = 0, pressedAt = 0, repeatAt = 0;
-        bool candidate = false, down = false, armed = false, emitted = false, shortless = false;
+        uint32_t changedAt = 0, pressedAt = 0, repeatAt = 0, qualifyAt = 0;
+        bool candidate = false, down = false, armed = false, emitted = false, shortless = false, qualified = false;
     } buttons_[13];
     static unsigned index(uint32_t bit) { unsigned i = 0; while (i < 31 && !(bit & (1U << i))) ++i; return i; }
     bool initialized_ = false;

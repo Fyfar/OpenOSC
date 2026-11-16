@@ -121,8 +121,10 @@ private:
     uint32_t sequence_ = 0;
     bool userHold_ = false, frozen_ = false, awaiting_ = false;
 };
+// The controller's two-byte commands. AUTO/RANGE is the factory's KEY5 stroke (RangeStroke): NextRange
+// 20 20 (press), RangeRelease 21 21 (short release), AutoRange 22 22 (hold).
 enum class CommandGroup : uint8_t { Voltage, ResistanceGroup, Current, Millivolts, Milliamps,
-                                  PeerHold, AutoRange, NextRange, PeerRelative };
+                                  PeerHold, AutoRange, NextRange, PeerRelative, RangeRelease };
 class Command {
 public:
     static bool encode(CommandGroup group, uint8_t (&bytes)[2]);

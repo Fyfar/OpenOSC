@@ -1,4 +1,5 @@
 #include "openosc/measurement/dmm/key_command.hpp"
+#include "openosc/measurement/dmm/ranges.hpp"
 
 namespace openosc::dmm {
 bool KeyCommand::matches(const Result &result) const {
@@ -11,22 +12,47 @@ bool KeyCommand::matches(const Result &result) const {
     }
     return false;
 }
+bool KeyCommand::confirms(const Result &result) const {
+    if (action_ == Action::ReleaseHold || action_ == Action::RelativeOff) return matches(result);
+    // Any range command (Auto included): only the function it was sent in confirms it.
+    if (Functions::identify(result) != function_ || !matches(result)) return false;
+    if (action_ == Action::Auto || !originManual_) return true;
+    unsigned index = 0;
+    return Ranges::current(result, &index) && (!originIndexed_ || index != index_);
+}
+void KeyCommand::pressed(const Result &latest, uint32_t now) {
+    deadline_ = now + StrokeMs;
+    function_ = Functions::identify(latest);
+    originManual_ = latest.range == RangeMode::Manual;
+    originIndexed_ = originManual_ && Ranges::current(latest, &index_);
+    pressed_ = true;
+}
 bool KeyCommand::request(Action action, const Result &latest, uint32_t now, uint64_t minimumTimestampUs) {
     if (busy()) return action_ == action;
-    action_ = action; sent_ = false; sequence_ = latest.sequence; deadline_ = now + 3000;
+    action_ = action; sent_ = pressed_ = false; sequence_ = latest.sequence; deadline_ = now + DeadlineMs;
     minimumTimestampUs_ = minimumTimestampUs;
     status_ = latest.sequence && latest.timestampUs >= minimumTimestampUs_ && action != Action::NextRange && matches(latest) ? DataStatus::Ok : DataStatus::Busy;
     return true;
 }
 bool KeyCommand::poll(const Result &latest, uint32_t now, CommandGroup &command) {
     if (!busy()) return false;
-    if (latest.timestampUs >= minimumTimestampUs_ && ((sent_ && latest.sequence != sequence_ && int32_t(now - earliest_) >= 0) ||
-        (!sent_ && action_ != Action::NextRange && latest.sequence)) && matches(latest)) {
+    if (pressed_ && !sent_) { // Its stroke runs: nothing counts before its end, bounded all the same.
+        if (int32_t(now - deadline_) >= 0) status_ = DataStatus::Timeout;
+        return false;
+    }
+    const bool current = latest.timestampUs >= minimumTimestampUs_;
+    if (sent_ && current && latest.sequence != seen_) { seen_ = latest.sequence; seenAt_ = now; }
+    const bool fresh = sent_ && current && latest.sequence != sequence_;
+    if ((fresh && int32_t(now - earliest_) >= 0 && confirms(latest)) ||
+        (current && !sent_ && action_ != Action::NextRange && latest.sequence && matches(latest))) {
         status_ = DataStatus::Ok; return false;
     }
+    // Entering Manual refused: a packet first seen ManualMs after the send still shows this function
+    // without MANU. An old packet followed by silence is not that (Timeout below).
+    if (fresh && rangePress() && !originManual_ && Functions::identify(latest) == function_ &&
+        seenAt_ - sentAt_ >= RangeSelector::ManualMs) { status_ = DataStatus::Unsupported; return false; }
     if (int32_t(now - deadline_) >= 0) { status_ = DataStatus::Timeout; return false; }
-    if (latest.timestampUs < minimumTimestampUs_ || !latest.sequence) return false;
-    if (sent_) return false;
+    if (!current || !latest.sequence || sent_) return false;
     command = action_ == Action::Auto ? CommandGroup::AutoRange : action_ == Action::ReleaseHold ? CommandGroup::PeerHold :
               action_ == Action::RelativeOff ? CommandGroup::PeerRelative : CommandGroup::NextRange;
     return true;

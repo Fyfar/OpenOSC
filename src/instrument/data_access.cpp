@@ -52,6 +52,9 @@ bool DataAccess::select(MeasurementMode view) {
         return true;
     if (active_ && view == measurement_)
         return true;
+    // Leaving the DMM: its commands are cancelled; a stroke whose 20 went sends its 21 first, and until
+    // that has left the switch is refused (Busy), nothing stopped yet.
+    if (!dmm_.close(Board::milliseconds())) { status_ = DataStatus::Busy; return false; }
     if (!serial_.stop()) { status_=DataStatus::HardwareError; return false; }
     if (uart_.txStatus() == DataStatus::Busy) {
         status_ = DataStatus::Busy;
@@ -83,8 +86,7 @@ bool DataAccess::select(MeasurementMode view) {
 bool DataAccess::activate(MeasurementMode view) {
     active_ = false;
     meter_.cancelHold(); // A mode's cycle belongs to the DMM screen it was armed on.
-    dmmSelector_.cancel();
-    dmmKey_.cancel(); dmmRange_.cancel(); dmmOperation_ = DmmOperation::Function;
+    dmm_.abandon(); // select() let no stroke run into this (it refuses while one is owed).
     framer_.reset();
     captureFailed_ = false;
     measurement_ = view;
@@ -170,21 +172,27 @@ bool DataAccess::sendDmmGroup(dmm::CommandGroup group) {
     return selectDmmFunction(dmm::Functions::next(group, dmm::Functions::identify(meter_.latest())));
 }
 bool DataAccess::selectDmmFunction(dmm::Function function) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmKey_.busy() || dmmRange_.busy()) return false;
-    if (!dmmSelector_.request(function, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+        !dmm_.selectFunction(function, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
     meter_.restart(function, timeUs_ + uint64_t(dmm::FunctionSelector::DeadlineMs) * 1000);
-    dmmOperation_ = DmmOperation::Function; return true;
+    return true;
 }
-bool DataAccess::advanceDmmRange() {
-    return requestDmmKey(dmm::KeyCommand::Action::NextRange);
+bool DataAccess::pressDmmRange() {
+    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+        !dmm_.pressRange(meter_.latest(), Board::milliseconds(), timeUs_, dmmActivatedAtUs_)) return false;
+    meter_.rangeCommand();
+    return true;
 }
+bool DataAccess::releaseDmmRange() { return dmm_.releaseRange(Board::milliseconds()); }
+bool DataAccess::holdDmmRange() { return dmm_.holdRange(Board::milliseconds()); }
+void DataAccess::closeDmmRange() { if (dmm_.rangeOpen()) dmm_.close(Board::milliseconds()); }
 bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmSelector_.busy() || dmmRange_.busy()) return false;
-    if (!dmmKey_.request(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+        !dmm_.requestKey(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     using Action = dmm::KeyCommand::Action;
     if (action == Action::NextRange || action == Action::Auto || action == Action::Manual) meter_.rangeCommand();
-    dmmOperation_ = DmmOperation::Key; return true;
+    return true;
 }
 bool DataAccess::setDmmAuto(bool automatic) {
     return requestDmmKey(automatic ? dmm::KeyCommand::Action::Auto : dmm::KeyCommand::Action::Manual);
@@ -209,11 +217,10 @@ bool DataAccess::relativeMeter(bool enabled) {
     return meter_.relative(enabled);
 }
 bool DataAccess::setDmmRange(unsigned index) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmSelector_.busy() || dmmKey_.busy() ||
-        meter_.latest().timestampUs < dmmActivatedAtUs_) return false;
-    if (!dmmRange_.request(index, meter_.latest(), Board::milliseconds())) return false;
+    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+        !dmm_.setRange(index, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
-    dmmOperation_ = DmmOperation::Range; return true;
+    return true;
 }
 bool DataAccess::stepDmmRange(int direction) {
     unsigned index, count;
@@ -245,18 +252,29 @@ void DataAccess::beginShutdown() {
         request_=*original; scopeHeld_=false; zeroBlocked_=true; zeroMinimumSequence_=sequence_+1;
     }
     stopping_ = true;
-    dmmSelector_.cancel(); dmmKey_.cancel(); dmmRange_.cancel();
+    // A stroke whose 20 went still sends its 21 before the UART stops (serviceDmmClose, bounded).
+    dmmClosing_ = !dmm_.close(Board::milliseconds());
+    dmmCloseDeadline_ = Board::milliseconds() + DmmCloseMs;
     generator_.disable();
     serial_.stop();
     counters_.stop();
     stopCapture(true);
-    uart_.stop();
+    if (!dmmClosing_) stopDmmUart();
     heldFrame_.release();
     recordPending_ = false;
     logger_.finish();
 }
+void DataAccess::serviceDmmClose(uint32_t now) {
+    dmm_.service(uart_, meter_.latest(), now);
+    if (!dmm_.owes() || int32_t(now - dmmCloseDeadline_) >= 0) stopDmmUart();
+}
+void DataAccess::stopDmmUart() {
+    dmm_.abandon(); dmmClosing_ = false;
+    uart_.stop();
+}
 bool DataAccess::resume() {
     if (!stopping_) return true;
+    if (dmmClosing_) stopDmmUart(); // activate() starts the UART again.
     stopping_ = false;
     return activate(measurement_);
 }

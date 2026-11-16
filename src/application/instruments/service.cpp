@@ -14,6 +14,8 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     if (selection != lastSelection_) {
         if (visible && (selection == DataStatus::Timeout || selection == DataStatus::HardwareError))
             view_.notify("Multimeter command was not confirmed", now);
+        // One RANGE press answered by packets without MANU (KeyCommand, RangeSelector): no second press.
+        if (visible && selection == DataStatus::Unsupported) view_.notify("Meter did not report a manual range", now);
         lastSelection_ = selection;
         if (visible) refreshMeterPanel();
     }

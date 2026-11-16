@@ -160,6 +160,8 @@ private:
     void plotKeys(uint32_t keys, uint32_t now, bool fine);
     void scopeKeys(uint32_t keys, uint32_t now, bool fine);
     void meterKeys(uint32_t keys, uint32_t now);
+    void meterRangePress(uint32_t now); // AUTO/RANGE's qualified press on the DMM screen: the stroke's 20.
+    bool meterRangeContext() const;     // The DMM screen takes AUTO/RANGE (no panel, menu, Remote).
     void meterRangeHold(uint32_t now); // AUTO/RANGE held in the DMM.
     void applyBrightness();
     void shutdownNotice(const char *text, uint32_t now);

@@ -131,6 +131,7 @@ namespace openosc {
         if (wake) InputService::wake();
         if (InputService::overflowed()) {
             InputService::suppress();
+            data_.closeDmmRange(); // Its release may be among the lost events.
             if (uiReady_) view_.notify("Input overflow; press again",now);
         }
         if (uiReady_) { // The REL/Power hold's progress, from the input sampler's own timing.
@@ -206,6 +207,10 @@ void ApplicationController::applyPreferences() {
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
+    // An AUTO/RANGE stroke whose release or hold would now go elsewhere: its 21, never confirmed.
+    if (data_.dmmRangeOpen() && !meterRangeContext()) data_.closeDmmRange();
+    if (events.press & Keypad::AutoRange) meterRangePress(now); // KEY5's 20 20; only the DMM screen uses a press.
+    if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
     // instruments, and says why when it cannot.

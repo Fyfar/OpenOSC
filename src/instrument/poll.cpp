@@ -48,21 +48,8 @@ void DataAccess::poll(uint32_t now) {
             }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.
     }
-    if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) {
-        dmm::CommandGroup command;
-        if (dmmSelector_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
-            if (uart_.send(command, now)) dmmSelector_.sent(meter_.latest().sequence, now);
-            else dmmSelector_.fail();
-        }
-        if (dmmKey_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
-            if (uart_.send(command, now)) dmmKey_.sent(meter_.latest().sequence, now);
-            else dmmKey_.fail();
-        }
-        if (dmmRange_.poll(meter_.latest(), now, command) && uart_.txStatus() != DataStatus::Busy) {
-            if (uart_.send(command, now)) dmmRange_.sent(meter_.latest().sequence, now);
-            else dmmRange_.fail();
-        }
-    }
+    if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) dmm_.service(uart_, meter_.latest(), now);
+    if (dmmClosing_) serviceDmmClose(now); // Shutdown: the owed 21 before the UART stops.
     if (recordPending_ && !stopping_) {
         scope::FrameLease lease;
         if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }

@@ -41,6 +41,7 @@ public:
     bool optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const override;
     bool valueSwatch(unsigned row, uint32_t &rgb) const override { return optionSwatch(row, palette_, rgb); }
 private:
+    bool ranged() const; // The function shown has ranges (dmm::Ranges::selectable): else Range is Info, "None".
     dmm::Result result_;
     unsigned display_, face_, palette_;
     bool statistics_, relative_, logging_,serial_,jackBusy_;
