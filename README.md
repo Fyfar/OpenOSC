@@ -37,7 +37,7 @@ Captured on a ZT703S running OpenOSC.
   </tr>
   <tr>
     <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: dial with REL reference and statistics"></td>
-    <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency editor and waveform preview"></td>
+    <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency, waveform preview and soft-keys at the bottom"></td>
   </tr>
   <tr>
     <td align="center">Multimeter, analog view</td>
@@ -50,6 +50,14 @@ Captured on a ZT703S running OpenOSC.
   <tr>
     <td align="center">Daylight color scheme</td>
     <td align="center">Amber color scheme</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/menu.png" width="320" alt="Channel menu with the F1-F4 cards at the bottom, above the physical keys"></td>
+    <td><img src=".github/images/generator-layout.png" width="320" alt="Generator layout editor: choosing the position of the frequency, preview and buttons blocks"></td>
+  </tr>
+  <tr>
+    <td align="center">Menus above the F1–F4 keys</td>
+    <td align="center">Generator layout</td>
   </tr>
   <tr>
     <td><img src=".github/images/fft.png" width="320" alt="FFT, Blackman window, 2048 points, with frequency cursors"></td>
