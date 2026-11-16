@@ -2,6 +2,7 @@
 #include "openosc/settings/arrangement_json.hpp"
 #include "openosc/settings/json_input.hpp"
 #include "openosc/settings/instrument_json.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -31,7 +32,7 @@ bool section(JsonObjectConst root, const char *key) {
 bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output) {
     if (bytes > MaxBytes || !JsonInput::completeObject(input, bytes, 6))
         return false;
-    StaticJsonDocument<DocumentBytes> document;
+    auto &document = JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
     if (deserializeJson(document, input, bytes, DeserializationOption::NestingLimit(6)))
         return false;
     JsonObjectConst root = document.as<JsonObjectConst>();
@@ -157,7 +158,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
 size_t PreferencesJson::encode(const Preferences &values, char *output, size_t capacity, bool pretty) {
     if (!values.valid())
         return 0;
-    StaticJsonDocument<DocumentBytes> document;
+    auto &document = JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
     document["schema"] = 1;
     document["mode"] = InstrumentModeKeys[values.mode];
     document["display"]["brightness"] = values.brightness;
