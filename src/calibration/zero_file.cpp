@@ -3,15 +3,20 @@
 #include "openosc/storage/layout.hpp"
 #include "openosc/calibration/zero_json.hpp"
 #include "openosc/storage/json_files.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include "openosc/calibration/profile_store.hpp"
 
 namespace openosc::calibration {
+namespace {
+constexpr size_t TextBytes=ZeroJson::MaxBytes+1; // In the JSON workspace, not on the stack.
+static_assert(TextBytes<=JsonWorkspace::TextBytes,"The zero text exceeds the JSON workspace");
+}
 bool ZeroFile::save(const ZeroProfile &values) {
     error_=nullptr;
     if (!values.valid() || values.factoryCrc!=factoryCrc_) { error_="Invalid zero correction"; return false; }
     if (!fs_.mounted() || storage::ensureDirectory(storage::Layout::Calibration) != FR_OK) { error_="Calibration disk unavailable"; return false; }
-    char json[ZeroJson::MaxBytes+1];
-    const size_t bytes=ZeroJson::encode(values,json,sizeof json);
+    char *json=JsonWorkspace::text(); // read() has parsed its text by now.
+    const size_t bytes=ZeroJson::encode(values,json,TextBytes);
     if (!bytes || !JsonFiles::write(Path,json,bytes)) { error_="Cannot save scope zero JSON"; return false; }
     values_=values; loaded_=true;
     return true;
@@ -24,10 +29,10 @@ bool ZeroFile::read(uint16_t factoryCrc) {
     factoryCrc_=factoryCrc; error_=nullptr; repaired_=false;
     if (values_.factoryCrc!=factoryCrc) { values_={}; values_.factoryCrc=factoryCrc; }
     if (!fs_.mounted()) { error_="Calibration disk unavailable"; return false; }
-    char json[ZeroJson::MaxBytes+1];
+    char *json=JsonWorkspace::text();
     ZeroProfile candidate; candidate.factoryCrc=factoryCrc;
     using Load=ProfileStore::Load;
-    switch (ProfileStore::load(Path,Previous,json,sizeof json,repaired_,[&](const char *text,size_t bytes) {
+    switch (ProfileStore::load(Path,Previous,json,TextBytes,repaired_,[&](const char *text,size_t bytes) {
                 return ZeroJson::parse(text,bytes,factoryCrc,candidate); })) {
     case Load::Current: values_=candidate; return true;
     case Load::Previous:

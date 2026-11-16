@@ -1,12 +1,19 @@
 #include "openosc/settings/preferences_file.hpp"
 #include "openosc/settings/preferences_json.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include "openosc/storage/directories.hpp"
 #include "openosc/storage/json_files.hpp"
 
 namespace openosc {
+namespace {
+// The file's text lies in the JSON workspace, as its document does (PreferencesJson): on the stack
+// the two made a save from the main loop overflow it.
+constexpr size_t TextBytes = PreferencesJson::MaxBytes + 1;
+static_assert(TextBytes <= JsonWorkspace::TextBytes, "The settings text exceeds the JSON workspace");
+}
 bool PreferencesFile::readValid(const char* path, Preferences& output, bool& storageError) const {
-    char json[PreferencesJson::MaxBytes + 1]; size_t bytes = 0;
-    const auto read = JsonFiles::read(path, json, sizeof json, bytes);
+    char *json = JsonWorkspace::text(); size_t bytes = 0; // SRAM4, not the stack (TextBytes).
+    const auto read = JsonFiles::read(path, json, TextBytes, bytes);
     storageError = read == JsonFiles::ReadResult::StorageError;
     return read == JsonFiles::ReadResult::Complete && PreferencesJson::parse(json, bytes, output);
 }
@@ -31,8 +38,8 @@ bool PreferencesFile::load() {
 bool PreferencesFile::save(const Preferences& values) {
     error_ = nullptr;
     if (!fs_.mounted() || storage::ensureDirectory(storage::Layout::Settings) != FR_OK) { error_ = "SETTINGS DISK IS NOT AVAILABLE"; return false; }
-    char json[PreferencesJson::MaxBytes + 1];
-    const size_t bytes = PreferencesJson::encode(values, json, sizeof json);
+    char *json = JsonWorkspace::text();
+    const size_t bytes = PreferencesJson::encode(values, json, TextBytes);
     if (!bytes || !JsonFiles::write(Path, json, bytes)) { error_ = "CANNOT SAVE SETTINGS JSON"; return false; }
     values_ = values;
     return true;

@@ -69,6 +69,28 @@ bool elements(JsonVariantConst input, ElementStyle* styles) {
     }
     return true;
 }
+// The stock themes these compare with are 2.3 KiB each: one at a time, each in a frame of its own
+// that is gone before the next (never inlined into parse and ThemeStore::reload, whose frame held
+// four themes and did not fit under the main loop).
+__attribute__((noinline)) bool legacyCustom(const Theme &candidate) {
+    const auto old = Theme::defaults(LayoutPreset::Legacy);
+    bool custom = false;
+    for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
+        for (unsigned i = 0; i < 6; ++i)
+            custom |= !ThemeMigration::legacyStock(mode, i, candidate.elements[mode][i], old.elements[mode][i]);
+    return custom;
+}
+__attribute__((noinline)) void adoptCards(Theme &candidate) {
+    const auto updated = Theme::defaults();
+    for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
+        for (unsigned i = 0; i < ElementCount; ++i) {
+            auto &e = candidate.elements[mode][i];
+            const auto &next = updated.elements[mode][i];
+            e.x = next.x; e.y = next.y; e.width = next.width; e.height = next.height;
+            if (i >= 6) e.visible = next.visible;
+        }
+    candidate.layout = LayoutPreset::Cards;
+}
 }
 bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
     if (!json || bytes > MaxBytes || !JsonInput::completeObject(json, bytes, 8)) return false;
@@ -93,7 +115,8 @@ bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
         else if (!std::strcmp(name, "legacy")) layout = LayoutPreset::Legacy;
         else return false;
     }
-    Theme candidate = Theme::defaults(layout);
+    Theme &candidate = output; // No second Theme (2.3 KiB) on the stack: see parse() in theme.hpp.
+    candidate = Theme::defaults(layout);
     if(root.containsKey("plot")&&(!root["plot"].is<JsonObjectConst>()||!PlotJson::parse(root["plot"],candidate.plot)))return false;
     const auto colors = root["colors"];
     if (!colors.isNull() && !colors.is<JsonObjectConst>()) return false;
@@ -113,27 +136,8 @@ bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
         if (!elements(root[ThemeScreenKeys[mode]], candidate.elements[mode])) return false;
     // An older firmware's stock DMM body (fonts included) first: the legacy check below then sees it as stock.
     ThemeMigration::adoptStockMeter(candidate);
-    if (!explicitLayout && !modernElements) {
-        const auto old = Theme::defaults(LayoutPreset::Legacy);
-        bool custom = false;
-        for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
-            for (unsigned i = 0; i < 6; ++i) {
-                custom |= !ThemeMigration::legacyStock(mode, i, candidate.elements[mode][i], old.elements[mode][i]);
-            }
-        if (!custom) {
-            const auto updated = Theme::defaults();
-            for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
-                for (unsigned i = 0; i < ElementCount; ++i) {
-                    auto &e = candidate.elements[mode][i];
-                    const auto &next = updated.elements[mode][i];
-                    e.x = next.x; e.y = next.y; e.width = next.width; e.height = next.height;
-                    if (i >= 6) e.visible = next.visible;
-                }
-            candidate.layout = LayoutPreset::Cards;
-        }
-    }
+    if (!explicitLayout && !modernElements && !legacyCustom(candidate)) adoptCards(candidate);
     ThemeMigration::adoptStockScope(candidate); // An older firmware's stock Scope geometry.
-    output = candidate;
     return true;
 }
 }
