@@ -1,4 +1,6 @@
 #include "openosc/application/controller.hpp"
+#include <cstdio>
+#include <cstring>
 
 namespace openosc {
 // The level belongs to the next capture; its marker sits on the scale of the record on screen.
@@ -44,6 +46,11 @@ ui::SoftKeys ApplicationController::imageSoftKeys() const {
     keys.keys[3] = {"Back", "", true};
     return keys;
 }
+void ApplicationController::meterHoldWord(char *output, size_t capacity) const {
+    const auto &meter = data_.meter();
+    if (meter.held()) { if (capacity) output[0] = 0; return; } // The manual or the DMM's own HOLD: "HOLD".
+    meter.holdCycle().indicator(data_.nowUs(), output, capacity);
+}
 void ApplicationController::displayData(uint32_t now) {
     refreshSoftKeys();
     if (uint32_t(now-fpsAt_)>=1000) {
@@ -79,7 +86,9 @@ void ApplicationController::displayData(uint32_t now) {
         if (state_.mode == MeasurementMode::Oscilloscope) view_.captureStatus(data_.status(), data_.scopeHeld());
         else if (state_.mode == MeasurementMode::Multimeter) {
             const auto &meter = data_.meter();
-            view_.multimeterStatus(meter.displayed(), meter.held(), meter.status(data_.nowUs(), 2000000), meter.relative().active());
+            char word[sizeof lastMeterHoldWord_];
+            meterHoldWord(word, sizeof word);
+            view_.multimeterStatus(meter.displayed(), meter.holding(), meter.status(data_.nowUs(), 2000000), meter.relative().active(), word);
         } else view_.generatorStatus(data_.generator().snapshot());
         return;
     }
@@ -139,16 +148,24 @@ void ApplicationController::displayData(uint32_t now) {
         dataAt_ = now;
         const auto &meter = data_.meter();
         const auto status = meter.status(data_.nowUs(), 2000000);
+        // The hold mode's word on the pill: its change is the capture's confirmation (WAIT -> HOLD,
+        // A-WAIT -> A-HOLD, a new reading under A-HOLD), nothing over the reading or the keys, no
+        // sound; a countdown second redraws only the pill.
+        char word[sizeof lastMeterHoldWord_];
+        meterHoldWord(word, sizeof word);
         if (dataRefresh_ || lastMeterSequence_ != meter.displayed().sequence ||
-            lastMeterHold_ != meter.held() || lastMeterStatus_ != status) {
+            lastMeterHold_ != meter.holding() || lastMeterStatus_ != status) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
                                           bool(prefs_.meter.statistics), prefs_.meter.face, prefs_.meter.palette,
-                                          &prefs_.meter.appearance};
-            view_.multimeter(meter.displayed(), meter.held(), status, context);
+                                          &prefs_.meter.appearance, word};
+            view_.multimeter(meter.displayed(), meter.holding(), status, context);
             lastMeterSequence_ = meter.displayed().sequence;
             lastMeterStatus_ = status;
-            lastMeterHold_ = meter.held();
-        }
+            lastMeterHold_ = meter.holding();
+        } else if (std::strcmp(word, lastMeterHoldWord_))
+            view_.multimeterStatus(meter.displayed(), meter.holding(), status,
+                                   meter.relative().matches(meter.displayed()), word);
+        std::snprintf(lastMeterHoldWord_, sizeof lastMeterHoldWord_, "%s", word);
     } else {
         dataAt_ = now;
         const auto output = data_.generator().snapshot();

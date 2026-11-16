@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/board/current.hpp"
 #include "openosc/ui/editors/property_list.hpp"
+#include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/ui/format/meter.hpp"
 #include "openosc/settings/theme.hpp"
@@ -8,13 +9,15 @@
 namespace openosc::ui {
 class MeterProperties final : public PropertyList {
 public:
-    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, Relative, ResetStatistics, Logging, SerialOutput, Count };
+    // Hold: its own list (MeterHoldProperties), the mode as its value.
+    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, Relative, Hold, ResetStatistics, Logging, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
                              bool relative = false, bool logging = false, bool serial=false, bool jackBusy=false,
-                             unsigned face = 0, unsigned palette = 0, const Theme *theme = nullptr)
+                             unsigned face = 0, unsigned palette = 0, const Theme *theme = nullptr,
+                             dmm::HoldMode hold = dmm::HoldMode::Manual)
         : result_(result), display_(display), face_(face), palette_(palette), statistics_(statistics), relative_(relative),
-          logging_(logging),serial_(serial),jackBusy_(jackBusy), theme_(theme) {}
+          logging_(logging),serial_(serial),jackBusy_(jackBusy), theme_(theme), hold_(hold) {}
     unsigned display() const { return display_; }
     unsigned face() const { return face_; }
     unsigned palette() const { return palette_; }
@@ -42,5 +45,6 @@ private:
     unsigned display_, face_, palette_;
     bool statistics_, relative_, logging_,serial_,jackBusy_;
     const Theme *theme_;
+    dmm::HoldMode hold_;
 };
 } // namespace openosc::ui

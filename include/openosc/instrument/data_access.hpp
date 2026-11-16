@@ -108,7 +108,14 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool selectDmmFunction(dmm::Function function);
     bool advanceDmmRange();
     bool setDmmAuto(bool automatic);
+    // The manual HOLD (and the DMM's own, released by its key); off also ends a mode's cycle.
     bool holdMeter(bool held);
+    // Delayed/Stable/Auto (dmm::HoldDetector): the cycle armed now (false outside the DMM, in Manual,
+    // under the manual HOLD), cancelled; settings applied (cancels a cycle, never arms one). Leaving
+    // the DMM cancels it.
+    bool armMeterHold();
+    void cancelMeterHold() { meter_.cancelHold(); }
+    void configureMeterHold(const dmm::HoldSettings &settings) { meter_.configureHold(settings); }
     bool relativeMeter(bool enabled);
     bool setDmmRange(unsigned index);
     bool stepDmmRange(int direction);

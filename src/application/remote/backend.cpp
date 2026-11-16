@@ -88,7 +88,8 @@ void InstrumentBackend::endSession() {
 const dmm::Result &InstrumentBackend::meter() const {
     const auto &session = application_.data_.meter(); reading_ = session.displayed();
     if (reading_.primary.valid() && session.relative().active()) reading_.primary = session.relative().apply(reading_);
-    reading_.packetHold = session.held(); reading_.peerRelative = reading_.peerRelative || session.relative().active();
+    reading_.packetHold = session.holding(); // A HOLD's or a hold mode's reading: READ waits for none.
+    reading_.peerRelative = reading_.peerRelative || session.relative().active();
     return reading_;
 }
 DataStatus InstrumentBackend::meterStatus() const { return application_.data_.meter().status(application_.data_.nowUs(),2000000); }
@@ -97,6 +98,15 @@ bool InstrumentBackend::setAuto(bool value) { return application_.meterCommand(a
 bool InstrumentBackend::setRange(unsigned index) { return application_.meterCommand(application_.data_.setDmmRange(index)); }
 bool InstrumentBackend::holdMeter(bool held) { return application_.data_.holdMeter(held); }
 bool InstrumentBackend::relativeMeter(bool enabled) { return application_.data_.relativeMeter(enabled); }
+scpi::MeterHold InstrumentBackend::meterHold() const {
+    const auto &cycle = application_.data_.meter().holdCycle();
+    return {application_.prefs_.meter.hold, cycle.phase(), cycle.captured() != nullptr, cycle.captures(),
+            cycle.remainingMs(application_.data_.nowUs())};
+}
+bool InstrumentBackend::meterHold(const dmm::HoldSettings &settings) {
+    return application_.meterHoldSettings(settings, Board::milliseconds());
+}
+bool InstrumentBackend::armMeterHold() { return application_.data_.armMeterHold(); }
 dmm::StatisticsView InstrumentBackend::meterStatistics() const {
     const auto &session = application_.data_.meter();
     const auto &shown = session.displayed();

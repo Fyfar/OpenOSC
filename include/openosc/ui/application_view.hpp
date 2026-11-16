@@ -63,7 +63,9 @@ public:
         meter_.update(result, held, status, context);
     }
     void generator(const generator::Snapshot &snapshot) { generator_.update(snapshot); }
-    void multimeterStatus(const dmm::Result &result, bool held, DataStatus status, bool relative = false) { meter_.status(result, held, status, relative); }
+    void multimeterStatus(const dmm::Result &result, bool held, DataStatus status, bool relative = false, const char *hold = nullptr) {
+        meter_.status(result, held, status, relative, hold);
+    }
     // Every 8 ms or so while the DMM shows: the bar, and the analog needle's motion.
     void multimeterBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now = lv_tick_get()) {
         meter_.fastBar(result,status,relative,now);

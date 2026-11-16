@@ -29,6 +29,7 @@ private:
     bool channelCommand(const Command &command);
     bool waveformCommand(const Command &command);
     bool meterCommand(const Command &command);
+    bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
     void dispatch(const Command &command);
     void reply(const char *format, ...);

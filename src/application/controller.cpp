@@ -185,6 +185,8 @@ void ApplicationController::applyPreferences() {
     state_.scope.measurements = prefs_.scope.measurements;
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     state_.meter.function = prefs_.meterFunction;
+    // Only the hold mode and its parameters: a cycle or snapshot never comes back by itself.
+    if (data_.meter().holdCycle().settings() != prefs_.meter.hold) data_.configureMeterHold(prefs_.meter.hold);
     idle_.configure(prefs_.idle,Board::milliseconds());
     dimmed_=false;
     applyBrightness();

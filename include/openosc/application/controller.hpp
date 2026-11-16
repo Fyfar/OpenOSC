@@ -15,6 +15,7 @@
 #include "openosc/ui/editors/trigger_editor.hpp"
 #include "openosc/ui/editors/meter_properties.hpp"
 #include "openosc/ui/editors/meter_appearance_properties.hpp"
+#include "openosc/ui/editors/meter_hold_properties.hpp"
 #include "openosc/ui/editors/arrangement_properties.hpp"
 #include "openosc/ui/editors/scope_appearance_properties.hpp"
 #include "openosc/ui/editors/scope_editor.hpp"
@@ -169,6 +170,15 @@ private:
     void meterChanged(uint32_t now); // The DMM panel's choices, taken at once.
     ui::MeterProperties meterProperties() const;
     void meterAppearanceKeys(uint32_t keys, uint32_t now);
+    // Measurement > Hold: each committed field saved and applied at once (a running cycle ends, none
+    // starts); Back: the DMM panel on its Hold row.
+    void meterHoldKeys(uint32_t keys, uint32_t now);
+    // The one path for new hold settings (the panel, SCPI): valid ones saved and applied (a running
+    // cycle ends, none starts); the same ones change nothing.
+    bool meterHoldSettings(const dmm::HoldSettings &settings, uint32_t now);
+    // The HOLD key in the DMM by the mode (docs/DMM_AUTO_HOLD.md): a manual or the DMM's own HOLD
+    // released first; Manual: HOLD now; the others: the cycle armed, or (armed) cancelled.
+    void meterHoldKey(uint32_t now);
     // LAYOUT (Scope, DMM digital or analog) and the Scope's COLORS: each committed choice is taken
     // and saved at once and only restyles the screen (applyLooks); the capture, HOLD, the record,
     // the DMM statistics and the measurement settings are untouched. Back: the parent panel.
@@ -208,7 +218,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;
@@ -253,6 +263,7 @@ private:
     DataStatus lastSelection_ = DataStatus::NoData;
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
+    ui::MeterHoldProperties holdEditor_;
     ui::ArrangementProperties<ScopeBlock> scopeLayout_;
     ui::ArrangementProperties<GeneratorBlock> generatorLayout_;
     bool generatorLayoutFromSettings_ = false; // Where Back returns: Settings / Display, or GEN Parameters.
@@ -319,6 +330,8 @@ private:
     DataStatus lastMeterStatus_ = DataStatus::NoData;
     DataStatus lastScopeStatus_ = DataStatus::NoData;
     bool lastMeterHold_ = false, lastScopeHold_ = false;
+    char lastMeterHoldWord_[16] = ""; // The hold mode's state pill word as last shown.
+    void meterHoldWord(char *output, size_t capacity) const; // "" under the manual/DMM HOLD or idle.
     plot::Options heldView_;
     bool heldViewActive_ = false;
     uint32_t heldViewRelease_ = 0;

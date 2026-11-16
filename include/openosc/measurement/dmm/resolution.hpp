@@ -37,6 +37,13 @@ public:
         return resolution;
     }
     bool valid() const { return quantity_ != Quantity::Unknown; }
+    // One unit of the last digit shown, in SI ("-15.561" mV: 1e-6 V); 0 when invalid.
+    double quantum() const {
+        if (!valid()) return 0;
+        double q = unitSi_;
+        for (unsigned i = 0; i < decimals_; ++i) q /= 10;
+        return q;
+    }
     Quantity quantity() const { return quantity_; }
     unsigned places() const { return decimals_; }
     const char *unit() const { return unit_; }

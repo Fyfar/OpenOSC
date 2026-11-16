@@ -176,19 +176,24 @@ void MeterScreen::fastBar(const dmm::Result &result, DataStatus status, const dm
     feed(result, status, relative);
     if (analog_) host_.dial().service(now);
 }
-void MeterScreen::status(const dmm::Result &result, bool held, DataStatus status, bool relative) {
-    const char *state = held ? status == DataStatus::Stale ? "HOLD / STALE" : "HOLD"
+void MeterScreen::status(const dmm::Result &result, bool held, DataStatus status, bool relative, const char *mode) {
+    const bool armed = mode && *mode; // A hold mode's cycle: its word, never "LIVE" for a held reading.
+    const char *word = armed ? mode : "HOLD";
+    const char *state = held ? (status == DataStatus::Stale ? "STALE" : "")
                         : status == DataStatus::Stale ? "STALE"
                         : status == DataStatus::NoData ? "NO DATA"
+                        : armed ? ""
                         : result.primary.status == DataStatus::Overload ? "OVERLOAD"
                         : result.primary.valid() ? "LIVE" : "INVALID";
-    const auto tone = held || result.primary.status == DataStatus::Overload ? StatusTone::Alert
+    const auto tone = held || (!armed && result.primary.status == DataStatus::Overload) ? StatusTone::Alert
                       : status == DataStatus::Stale || status == DataStatus::NoData ? StatusTone::Warning
+                      : armed ? StatusTone::Neutral // Waiting over live readings.
                       : result.primary.valid() ? StatusTone::Good : StatusTone::Alert;
-    if (relative || result.peerRelative) {
-        char text[48]; std::snprintf(text, sizeof text, "%s REL", state);
-        host_.status(text, tone);
-    } else host_.status(state, tone);
+    const bool prefix = held || armed;
+    char text[48];
+    std::snprintf(text, sizeof text, "%s%s%s%s", prefix ? word : "", prefix && *state ? " / " : "", state,
+                  relative || result.peerRelative ? " REL" : ""); // "HOLD / STALE REL", "WAIT", "LIVE".
+    host_.status(text, tone);
 }
 void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status,
                          const MeterContext &context) {
@@ -196,7 +201,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     // reading, cards) waits for the DMM to show again, so nothing hidden comes back over the menu
     // and the menu's soft keys stay where it put them; the session and its statistics run on.
     if (host_.overlayActive()) {
-        this->status(result, held, status, context.relative && context.relative->matches(result));
+        this->status(result, held, status, context.relative && context.relative->matches(result), context.hold);
         return;
     }
     auto &elements = host_.elements();
@@ -210,7 +215,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
         layout(context.display == AnalogDisplay);
     }
     const bool relative = context.relative && context.relative->matches(result);
-    this->status(result, held, status, relative);
+    this->status(result, held, status, relative, context.hold);
     feed(result, status, context.relative);
     const double reference = relative ? context.relative->reference().si : 0;
     const auto *statistics = context.statistics;

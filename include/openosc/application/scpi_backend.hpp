@@ -28,6 +28,9 @@ public:
     bool setRange(unsigned) override;
     bool holdMeter(bool) override;
     bool relativeMeter(bool) override;
+    scpi::MeterHold meterHold() const override;
+    bool meterHold(const dmm::HoldSettings &settings) override;
+    bool armMeterHold() override;
     dmm::StatisticsView meterStatistics() const override;
     void resetMeterStatistics() override;
     MeasurementMode screen() const override;

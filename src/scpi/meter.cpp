@@ -26,8 +26,59 @@ void Engine::meterReading(bool secondary) {
     else if (!value.valid()) error(-230, true);
     else number(value.si);
 }
+// SYSTem:DMM:HOLD:<field>: the hold settings one at a time, each checked as the whole by
+// HoldSettings::valid (the editor's and the file's check; a value out of its limits, off its step or
+// breaking rearm > band: -222, nothing changes). Times in ms, band and rearm in last-digit units.
+bool Engine::meterHoldCommand(const Command &c) {
+    const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
+    struct Field { const char *header; uint32_t dmm::HoldSettings::*value; };
+    static constexpr Field fields[] = {{"SYSTem:DMM:HOLD:DELay", &dmm::HoldSettings::delayMs}, {"SYSTem:DMM:HOLD:STABle", &dmm::HoldSettings::stableMs},
+        {"SYSTem:DMM:HOLD:BAND", &dmm::HoldSettings::bandDigits}, {"SYSTem:DMM:HOLD:REARm", &dmm::HoldSettings::rearmDigits},
+        {"SYSTem:DMM:HOLD:COUNt", &dmm::HoldSettings::minReadings}};
+    static constexpr const char *modes[] = {"MANual", "DELayed", "STABle", "AUTO"}, *replies[] = {"MAN", "DEL", "STAB", "AUTO"};
+    static_assert(sizeof modes / sizeof *modes == unsigned(dmm::HoldMode::Count));
+    auto settings = backend_.meterHold().settings;
+    const auto apply = [&] {
+        if (!settings.valid()) error(-222);
+        else if (!backend_.meterHold(settings)) error(-221);
+    };
+    if (match("SYSTem:DMM:HOLD:MODE")) {
+        if (c.query) { reply("%s", replies[unsigned(settings.mode)]); return true; }
+        for (unsigned i = 0; i < unsigned(dmm::HoldMode::Count); ++i)
+            if (Header::word(c.argument, modes[i])) { settings.mode = dmm::HoldMode(i); apply(); return true; }
+        error(-224);
+        return true;
+    }
+    for (const auto &f : fields) {
+        if (!match(f.header)) continue;
+        if (c.query) { reply("%lu", (unsigned long)(settings.*f.value)); return true; }
+        double value;
+        if (!argument(c, value)) return true;
+        if (!(value >= 0 && value <= 100000) || value != double(uint32_t(value))) { error(-222); return true; }
+        settings.*f.value = uint32_t(value);
+        apply();
+        return true;
+    }
+    if (match("SYSTem:DMM:HOLD:ARM")) {
+        if (c.query || *c.argument) error(-108, c.query);
+        else if (!backend_.armMeterHold()) error(-221);
+        return true;
+    }
+    if (match("SYSTem:DMM:HOLD:STATe")) {
+        // phase,captured,captures,remaining_ms: IDLE|DEL|WAIT|HELD; a snapshot in meter() (0/1); the
+        // captures since boot; the countdown left (Delayed).
+        if (!c.query) { error(-109); return true; }
+        static constexpr const char *phases[] = {"IDLE", "DEL", "WAIT", "HELD"};
+        const auto hold = backend_.meterHold();
+        reply("%s,%u,%lu,%lu", phases[unsigned(hold.phase)], unsigned(hold.captured), (unsigned long)hold.captures,
+              (unsigned long)hold.remainingMs);
+        return true;
+    }
+    return false;
+}
 bool Engine::meterCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
+    if (meterHoldCommand(c)) return true;
     if (match("SYSTem:DMM:RESult")) {
         if (!c.query) { error(-109); return true; }
         const auto &result = backend_.meter();

@@ -18,7 +18,9 @@ public:
     using InstrumentScreen::InstrumentScreen;
     void activate(const ApplicationState &state) override;
     void update(const dmm::Result &result, bool held, DataStatus status, const MeterContext &context);
-    void status(const dmm::Result &result, bool held, DataStatus status, bool relative = false);
+    // The state pill. held: the reading shown is frozen (a HOLD or a hold mode's snapshot); `mode`: the
+    // hold mode's word in place of "HOLD" (or, armed over live readings, before the state: "WAIT").
+    void status(const dmm::Result &result, bool held, DataStatus status, bool relative = false, const char *mode = nullptr);
     // The bar and the needle, every ~8 ms: `now` is the monotonic time the needle moves by.
     void fastBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now);
     // The block orders of the digital faces and of the analog dial (ScreenLayout): placed at once

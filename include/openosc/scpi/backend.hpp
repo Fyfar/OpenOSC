@@ -10,6 +10,13 @@
 #include "openosc/data/performance.hpp"
 
 namespace openosc::scpi {
+// The DMM hold modes as the PC sees them (docs/DMM_AUTO_HOLD.md): the saved settings and the cycle.
+struct MeterHold {
+    dmm::HoldSettings settings;
+    dmm::HoldDetector::Phase phase = dmm::HoldDetector::Phase::Idle;
+    bool captured = false; // A snapshot is what meter() reports now.
+    uint32_t captures = 0, remainingMs = 0;
+};
 // Called only by the foreground dispatcher. A frame remains leased until releaseFrame().
 class Backend {
 public:
@@ -43,6 +50,12 @@ public:
     virtual bool holdMeter(bool) = 0;
     virtual bool relativeMeter(bool) = 0;
     virtual dmm::StatisticsView meterStatistics() const = 0; // As the DMM screen shows it.
+    // The hold modes: their settings (saved and applied as Measurement > Hold does: a running cycle
+    // ends, none starts; false: not taken), the cycle armed as the HOLD key arms it (false: Manual,
+    // not the DMM, a manual HOLD in force), and the state. meter() reports a snapshot as held.
+    virtual MeterHold meterHold() const { return {}; }
+    virtual bool meterHold(const dmm::HoldSettings &) { return false; }
+    virtual bool armMeterHold() { return false; }
     virtual void resetMeterStatistics() = 0;
     // The MODE screen, as the MODE key selects it. A different measurement (Scope <-> DMM) changes the
     // USB profile: the device reconnects, as after MODE on the panel.

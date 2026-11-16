@@ -9,13 +9,13 @@ PropertyKind MeterProperties::kind(unsigned row) const {
     switch (row) {
     case Range: case Display: case Colors: case Digits: return PropertyKind::Choice;
     case ResetStatistics: return PropertyKind::Action;
-    case Appearance: case Layout: return PropertyKind::Page; // Their own lists (MeterAppearanceProperties, ArrangementProperties).
+    case Appearance: case Layout: case Hold: return PropertyKind::Page; // Own lists (MeterAppearance/MeterHold/ArrangementProperties).
     default: return PropertyKind::Toggle;
     }
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Relative",
-                                            "Reset statistics", "CSV logging", "Serial 115200"};
+                                            "Hold", "Reset statistics", "CSV logging", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
 unsigned MeterProperties::options(unsigned row) const {
@@ -53,6 +53,7 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
 void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
     else if (row == SerialOutput && jackBusy_) std::snprintf(output, capacity, "GEN on");
+    else if (row == Hold) std::snprintf(output, capacity, "%s", dmm::HoldSettings::name(hold_));
     else PropertyList::value(row, output, capacity);
 }
 // The choices are taken at once by the controller (meterChanged), which compares them with the

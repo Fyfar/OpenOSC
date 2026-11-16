@@ -67,6 +67,41 @@ void appearance(JsonObject meter, const MeterAppearance &values) {
         if (style.style != MeterRoleStyle::Inherit) role["style"] = info.styleKeys[style.style];
     }
 }
+// meter.hold: {"mode": "manual|delayed|stable|auto", "delay_ms", "stable_ms", "band_digits", "rearm_digits",
+// "min_readings"}. Each value stands alone against HoldSettings::valid (the editor's and SCPI's check):
+// one out of range or of another type keeps its default, never its neighbours or the rest of the file.
+// The band and the rearm threshold are one pair (rearm > band): taken together when they fit, else
+// each alone where it still fits the other.
+void hold(JsonObjectConst object, dmm::HoldSettings &output) {
+    dmm::HoldSettings value;
+    auto take = [&](const char *name, uint32_t dmm::HoldSettings::*field) {
+        if (!object[name].is<uint32_t>()) return;
+        auto next = value;
+        next.*field = object[name].as<uint32_t>();
+        if (next.valid()) value = next;
+    };
+    dmm::HoldMode mode;
+    if (dmm::HoldSettings::fromKey(object["mode"].as<const char *>(), mode)) value.mode = mode;
+    take("delay_ms", &dmm::HoldSettings::delayMs);
+    take("stable_ms", &dmm::HoldSettings::stableMs);
+    take("min_readings", &dmm::HoldSettings::minReadings);
+    if (object["band_digits"].is<uint32_t>() && object["rearm_digits"].is<uint32_t>()) {
+        auto pair = value;
+        pair.bandDigits = object["band_digits"].as<uint32_t>();
+        pair.rearmDigits = object["rearm_digits"].as<uint32_t>();
+        if (pair.valid()) value = pair;
+    }
+    take("band_digits", &dmm::HoldSettings::bandDigits);
+    take("rearm_digits", &dmm::HoldSettings::rearmDigits);
+    output = value;
+}
+void hold(JsonObject meter, const dmm::HoldSettings &values) {
+    auto object = meter.createNestedObject("hold");
+    object["mode"] = dmm::HoldSettings::key(values.mode);
+    object["delay_ms"] = values.delayMs; object["stable_ms"] = values.stableMs;
+    object["band_digits"] = values.bandDigits; object["rearm_digits"] = values.rearmDigits;
+    object["min_readings"] = values.minReadings;
+}
 }
 bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Preferences &output) {
     auto &s = output.scope;
@@ -82,6 +117,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
         !choice(meter, "palette", output.meter.palette, palettes)) return false;
     if (meter["appearance"].is<JsonObjectConst>()) appearance(meter["appearance"].as<JsonObjectConst>(), output.meter.appearance);
+    if (meter["hold"].is<JsonObjectConst>()) hold(meter["hold"].as<JsonObjectConst>(), output.meter.hold);
     arrangement(meter, "arrangement_digital", output.meter.digitalArrangement);
     arrangement(meter, "arrangement_analog", output.meter.analogArrangement);
     arrangement(scope, "arrangement", s.arrangement);
@@ -169,5 +205,6 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     arrangement(meter, "arrangement_analog", values.meter.analogArrangement);
     if (values.meter.rangeFunction < MeterFunctionCount) meter["range_function"] = MeterFunctions[values.meter.rangeFunction].key;
     appearance(meter, values.meter.appearance);
+    hold(meter, values.meter.hold);
 }
 } // namespace openosc

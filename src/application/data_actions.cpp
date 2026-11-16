@@ -160,6 +160,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::Frequency: frequencyKeys(keys, now); break;
     case Panel::Meter: meterPanelKeys(keys, now); break;
     case Panel::MeterAppearance: meterAppearanceKeys(keys, now); break;
+    case Panel::MeterHold: meterHoldKeys(keys, now); break;
     case Panel::MeterLayout: meterLayoutKeys(keys, now); break;
     case Panel::ScopeLayout: scopeLayoutKeys(keys, now); break;
     case Panel::GeneratorLayout: generatorLayoutKeys(keys, now); break;

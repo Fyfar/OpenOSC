@@ -46,6 +46,7 @@ void DataAccess::poll(uint32_t now) {
                 if (logger_.active())
                     logger_.append(meter_.latest(), meter_.userHeld());
             }
+        meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.
     }
     if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) {
         dmm::CommandGroup command;

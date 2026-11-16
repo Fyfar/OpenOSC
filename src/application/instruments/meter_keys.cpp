@@ -25,7 +25,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
         openPanel(Panel::Meter, meterEditor_);
         return;
     }
-    if ((keys & Keypad::HoldSave) && !data_.holdMeter(!data_.meter().held())) view_.notify("HOLD needs a valid reading", now);
+    if (keys & Keypad::HoldSave) meterHoldKey(now);
     dmm::CommandGroup group = dmm::CommandGroup::Voltage;
     if (keys & Keypad::F2) group = dmm::CommandGroup::ResistanceGroup;
     if (keys & Keypad::F3) group = dmm::CommandGroup::Current;
@@ -44,7 +44,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
     return ui::MeterProperties(meter.displayed(),prefs_.meter.display,prefs_.meter.statistics,
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
-        prefs_.meter.face, prefs_.meter.palette, &themes_.theme());
+        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode);
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -58,6 +58,11 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
     const auto outcome = navigator_.keys(keys, meterEditor_);
     if (outcome == Outcome::Back) { closePanel(); return; }
     if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::Layout) { openMeterLayout(); return; }
+    if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::Hold) {
+        holdEditor_ = ui::MeterHoldProperties(prefs_.meter.hold);
+        openPanel(Panel::MeterHold, holdEditor_);
+        return;
+    }
     if (outcome == Outcome::Open) { // Appearance: its own list, over the base the panel shows.
         // The theme in force and the DMM cards' colour, as MeterScreen styles with: Default/Base show the real base.
         const auto &theme = themes_.theme();

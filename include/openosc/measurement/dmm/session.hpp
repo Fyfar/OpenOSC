@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
 #include <cstddef>
@@ -58,12 +59,35 @@ public:
     bool userHeld() const { return userHold_; }
     DataStatus status(uint64_t nowUs, uint64_t staleAfterUs) const;
     const Result &latest() const { return latest_; }
-    const Result &displayed() const { return frozen_ ? held_ : latest_; }
+    // What the screen, the needle and SCPI show: the manual HOLD's reading, else the Delayed/Stable/
+    // Auto snapshot, else the latest. held() stays the manual and the DMM's own HOLD only: the
+    // statistics, the trend and the log go on under a mode's snapshot (docs/DMM_AUTO_HOLD.md).
+    const Result &displayed() const {
+        if (frozen_) return held_;
+        const Result *snapshot = detector_.captured();
+        return snapshot ? *snapshot : latest_;
+    }
+    // The hold mode's cycle (HoldDetector): configure (cancels it), arm, cancel, service.
+    void configureHold(const HoldSettings &settings) { detector_.configure(settings); }
+    bool armHold(uint64_t nowUs) { return detector_.arm(nowUs); }
+    void cancelHold() { detector_.cancel(); }
+    void service(uint64_t nowUs) { detector_.service(nowUs); }
+    // An accepted range command (RANGE, AUTO): a new scale, the mode's window starts again; a
+    // snapshot stays (Stable/Delayed keep it, Auto compares it in SI).
+    void rangeCommand() { detector_.restartWindow(); }
+    const HoldDetector &holdCycle() const { return detector_; }
+    bool holding() const { return frozen_ || detector_.captured(); } // Something other than the latest is shown.
     const Statistics &statistics() const { return stats_; }
     const History &history() const { return history_; }
     const RelativeReading &relative() const { return relative_; }
     // An accepted REL command restarts the statistics, as the factory's, even when REL was already so.
+    // A hold mode's cycle ends first, so REL takes the live reading as its reference, never the mode's
+    // snapshot: with the live reading not valid (OL, "--.") REL is refused and the cycle, its snapshot
+    // and the statistics stay as they were. Under the manual or the DMM's own HOLD, as before, the held
+    // reading; REL already on needs no new reference (the statistics restart, as always).
     bool relative(bool enabled) {
+        if (enabled && !relative_.active() && !frozen_ && detector_.active() && !latest_.primary.valid()) return false;
+        detector_.cancel();
         if (enabled != relative_.active()) {
             if (enabled) { if (!relative_.capture(displayed())) return false; }
             else relative_.clear();
@@ -84,6 +108,7 @@ public:
 
 private:
     Result latest_, held_;
+    HoldDetector detector_;
     Statistics stats_;
     History history_;
     RelativeReading relative_;

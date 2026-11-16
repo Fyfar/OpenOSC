@@ -77,6 +77,7 @@ bool DataAccess::select(MeasurementMode view) {
 }
 bool DataAccess::activate(MeasurementMode view) {
     active_ = false;
+    meter_.cancelHold(); // A mode's cycle belongs to the DMM screen it was armed on.
     dmmSelector_.cancel();
     dmmKey_.cancel(); dmmRange_.cancel(); dmmOperation_ = DmmOperation::Function;
     framer_.reset();
@@ -176,6 +177,8 @@ bool DataAccess::advanceDmmRange() {
 bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmSelector_.busy() || dmmRange_.busy()) return false;
     if (!dmmKey_.request(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+    using Action = dmm::KeyCommand::Action;
+    if (action == Action::NextRange || action == Action::Auto || action == Action::Manual) meter_.rangeCommand();
     dmmOperation_ = DmmOperation::Key; return true;
 }
 bool DataAccess::setDmmAuto(bool automatic) {
@@ -184,7 +187,12 @@ bool DataAccess::setDmmAuto(bool automatic) {
 bool DataAccess::holdMeter(bool held) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter) return false;
     if (!held && meter_.latest().packetHold && !requestDmmKey(dmm::KeyCommand::Action::ReleaseHold)) return false;
+    if (!held) meter_.cancelHold();
     return meter_.hold(held);
+}
+bool DataAccess::armMeterHold() {
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || meter_.userHeld()) return false;
+    return meter_.armHold(timeUs_);
 }
 bool DataAccess::relativeMeter(bool enabled) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter) return false;
@@ -199,6 +207,7 @@ bool DataAccess::setDmmRange(unsigned index) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmSelector_.busy() || dmmKey_.busy() ||
         meter_.latest().timestampUs < dmmActivatedAtUs_) return false;
     if (!dmmRange_.request(index, meter_.latest(), Board::milliseconds())) return false;
+    meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
     dmmOperation_ = DmmOperation::Range; return true;
 }
 bool DataAccess::stepDmmRange(int direction) {
