@@ -20,14 +20,20 @@ public:
     using Profile = typename Codec::Profile;
     static constexpr const char *Path = Codec::Path, *Previous = Codec::Previous;
     CalibrationFile(Filesystem &fs, const CalibrationData &factory) : fs_(fs), factory_(factory) {}
-    bool load() { loaded_ = read(); return loaded_; }
+    bool load() {
+        // A busy workspace is unreadable now: the profile in force (and loaded()), the file and its
+        // names stay; the same load passes once the workspace is idle.
+        if (!JsonWorkspace::idle()) { error_ = Codec::Text.unreadable; repaired_ = false; return false; }
+        loaded_ = read();
+        return loaded_;
+    }
     bool save(const Profile &values) {
         error_ = nullptr;
         if (!values.valid(factory_)) { error_ = Codec::Text.invalid; return false; }
         if (!fs_.mounted() || storage::ensureDirectory(storage::Layout::Calibration) != FR_OK) { error_ = "Calibration disk unavailable"; return false; }
-        char *json = JsonWorkspace::text(); // Not the stack; read() has parsed its text by now.
-        const size_t bytes = Codec::encode(values, factory_, json, TextBytes);
-        if (!bytes || !JsonFiles::write(Path, json, bytes)) { error_ = Codec::Text.unsaved; return false; }
+        JsonWorkspace::Text json; // Off the stack (JsonWorkspace).
+        const size_t bytes = json ? Codec::encode(values, factory_, json.data(), Codec::MaxBytes + 1) : 0;
+        if (!bytes || !JsonFiles::write(Path, json.data(), bytes)) { error_ = Codec::Text.unsaved; return false; }
         values_ = values; loaded_ = true;
         return true;
     }
@@ -38,18 +44,22 @@ public:
     bool loaded() const { return loaded_; }
     bool available() const { return fs_.mounted(); }
 private:
-    static constexpr size_t TextBytes = Codec::MaxBytes + 1;
-    static_assert(TextBytes <= JsonWorkspace::TextBytes, "The profile text exceeds the JSON workspace");
     bool read() {
         error_ = nullptr; repaired_ = false;
         const Profile empty = Codec::empty(factory_);
         if (values_.factoryCrc != factory_.crc()) values_ = empty;
         if (!fs_.mounted()) { error_ = "Calibration disk unavailable"; return false; }
-        char *json = JsonWorkspace::text();
+        static_assert(Codec::MaxBytes + 1 <= JsonWorkspace::TextCapacity);
         Profile candidate = empty;
         using Load = ProfileStore::Load;
-        switch (ProfileStore::load(Path, Previous, json, TextBytes, repaired_, [&](const char *text, size_t bytes) {
-                    return Codec::parse(text, bytes, factory_, candidate); })) {
+        Load load;
+        {   // The text is held only while the file is read: a restoring save() takes it again.
+            JsonWorkspace::Text json;
+            if (!json) { error_ = Codec::Text.unreadable; return false; }
+            load = ProfileStore::load(Path, Previous, json.data(), Codec::MaxBytes + 1, repaired_, [&](const char *text, size_t bytes) {
+                return Codec::parse(text, bytes, factory_, candidate); });
+        }
+        switch (load) {
         case Load::Current: values_ = candidate; return true;
         case Load::Previous: // A power loss between the two renames: the verified previous profile.
             values_ = candidate;

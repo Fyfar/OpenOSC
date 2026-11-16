@@ -21,7 +21,7 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     startQ16 = int64_t(m.samples - 1) * 65536 * o.pan / 1000;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     if (o.lockTrigger && m.triggered)
-        startQ16 += int64_t(m.triggerIndex) * 65536 - int64_t(spanQ16) * o.triggerPosition / 1000;
+        startQ16 += int64_t(m.triggerIndex) * 65536 - int64_t(pretrigger(m));
     // Without a trigger, Auto still needs captured history on both sides of the initial
     // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
@@ -29,6 +29,11 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
         startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
     if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, 0, int64_t(record - spanQ16));
     return true;
+}
+uint64_t Viewport::pretrigger(const scope::FrameMetadata &m) const {
+    if (m.samples < 2) return 0;
+    const uint64_t last = m.samples - 1, index = std::min<uint64_t>(m.triggerIndex, last);
+    return spanQ16 / last * index + spanQ16 % last * index / last;
 }
 void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &last) const {
     const uint64_t length = spanQ16 + 65536;

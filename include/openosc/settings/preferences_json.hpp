@@ -11,8 +11,8 @@ public:
     static constexpr size_t MaxBytes = 4096;
     // The JSON tree of the largest file: 169 members/elements (the DMM hold object's 7 included) and
     // 2.0 KB of copied strings (keys and values), a quarter kept as headroom (settings_layout checks
-    // it). In ArduinoJson slots, so a 32-bit MCU needs 240 * 16 + 2688 = 6528 bytes of the 48 KiB stack
-    // (6144 before the hold object) and a 64-bit host proportionally more.
+    // it). In ArduinoJson slots, so a 32-bit MCU needs 240 * 16 + 2688 = 6528 bytes (6144 before the hold
+    // object) and a 64-bit host proportionally more, leased from JsonWorkspace (SRAM4), not the stack.
     static constexpr size_t DocumentSlots = 240, StringBytes = 2688;
     static bool parse(const char* input, size_t bytes, Preferences& output);
     static size_t encode(const Preferences& values, char* output, size_t capacity,bool pretty=true);

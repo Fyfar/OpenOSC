@@ -91,12 +91,15 @@ void Watchdog::progress() {
 void Watchdog::expect(uint32_t ms) {
     if (threadContext()) policy_.expect(HAL_GetTick(), ms);
 }
-[[noreturn]] void Watchdog::fatal(uint32_t error) {
+// Never fed again: recorded, then reset by the watchdog (fatal, stackOverflow).
+[[noreturn]] static void halted(ResetRecord::Cause cause, uint32_t detail) {
     policy_.halt();
-    status_ |= Halted; boot_diagnostics.watchdog = status_;
-    record(ResetRecord::Cause::InitFailure, 0, error);
+    status_ |= Watchdog::Halted; boot_diagnostics.watchdog = status_;
+    record(cause, 0, detail);
     while (true) __NOP();
 }
+[[noreturn]] void Watchdog::fatal(uint32_t error) { halted(ResetRecord::Cause::InitFailure, error); }
+[[noreturn]] void Watchdog::stackOverflow(uint32_t survivedWords) { halted(ResetRecord::Cause::StackOverflow, survivedWords); }
 void Watchdog::terminalFeed() {
     IWDG1->KR = KeyRefresh;
     refreshWindow();

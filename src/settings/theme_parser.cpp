@@ -2,7 +2,7 @@
 #include "openosc/storage/layout.hpp"
 #include "openosc/settings/theme.hpp"
 #include "openosc/settings/json_input.hpp"
-#include "openosc/settings/theme_document.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include "openosc/settings/plot_json.hpp"
 #include <cstring>
 
@@ -69,34 +69,12 @@ bool elements(JsonVariantConst input, ElementStyle* styles) {
     }
     return true;
 }
-// The stock themes these compare with are 2.3 KiB each: one at a time, each in a frame of its own
-// that is gone before the next (never inlined into parse and ThemeStore::reload, whose frame held
-// four themes and did not fit under the main loop).
-__attribute__((noinline)) bool legacyCustom(const Theme &candidate) {
-    const auto old = Theme::defaults(LayoutPreset::Legacy);
-    bool custom = false;
-    for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
-        for (unsigned i = 0; i < 6; ++i)
-            custom |= !ThemeMigration::legacyStock(mode, i, candidate.elements[mode][i], old.elements[mode][i]);
-    return custom;
-}
-__attribute__((noinline)) void adoptCards(Theme &candidate) {
-    const auto updated = Theme::defaults();
-    for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
-        for (unsigned i = 0; i < ElementCount; ++i) {
-            auto &e = candidate.elements[mode][i];
-            const auto &next = updated.elements[mode][i];
-            e.x = next.x; e.y = next.y; e.width = next.width; e.height = next.height;
-            if (i >= 6) e.visible = next.visible;
-        }
-    candidate.layout = LayoutPreset::Cards;
-}
 }
 bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
     if (!json || bytes > MaxBytes || !JsonInput::completeObject(json, bytes, 8)) return false;
-    auto &document = ThemeScratch::document();
-    if (deserializeJson(document, json, bytes, DeserializationOption::NestingLimit(8))) return false;
-    JsonObjectConst root = document.as<JsonObjectConst>();
+    JsonWorkspace::Document<ThemeDocumentCapacity> document;
+    if (!document || deserializeJson(*document, json, bytes, DeserializationOption::NestingLimit(8))) return false;
+    JsonObjectConst root = document->as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>() != 1) return false;
     bool modernElements = false;
     for (const char *screen : ThemeScreenKeys)
@@ -115,8 +93,10 @@ bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
         else if (!std::strcmp(name, "legacy")) layout = LayoutPreset::Legacy;
         else return false;
     }
-    Theme &candidate = output; // No second Theme (2.3 KiB) on the stack: see parse() in theme.hpp.
-    candidate = Theme::defaults(layout);
+    // Whole themes off the stack (JsonWorkspace): the candidate and, below, the stock reference.
+    JsonWorkspace::ThemeLease candidateSlot(JsonWorkspace::ThemeSlot::Candidate), referenceSlot(JsonWorkspace::ThemeSlot::Reference);
+    if (!candidateSlot || !referenceSlot) return false;
+    Theme &candidate = candidateSlot.make([layout] { return Theme::defaults(layout); });
     if(root.containsKey("plot")&&(!root["plot"].is<JsonObjectConst>()||!PlotJson::parse(root["plot"],candidate.plot)))return false;
     const auto colors = root["colors"];
     if (!colors.isNull() && !colors.is<JsonObjectConst>()) return false;
@@ -136,8 +116,27 @@ bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
         if (!elements(root[ThemeScreenKeys[mode]], candidate.elements[mode])) return false;
     // An older firmware's stock DMM body (fonts included) first: the legacy check below then sees it as stock.
     ThemeMigration::adoptStockMeter(candidate);
-    if (!explicitLayout && !modernElements && !legacyCustom(candidate)) adoptCards(candidate);
+    if (!explicitLayout && !modernElements) {
+        const Theme &old = referenceSlot.make([] { return Theme::defaults(LayoutPreset::Legacy); });
+        bool custom = false;
+        for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
+            for (unsigned i = 0; i < 6; ++i) {
+                custom |= !ThemeMigration::legacyStock(mode, i, candidate.elements[mode][i], old.elements[mode][i]);
+            }
+        if (!custom) {
+            const Theme &updated = referenceSlot.make([] { return Theme::defaults(); }); // `old` ends here.
+            for (unsigned mode = 0; mode < InstrumentModeCount; ++mode)
+                for (unsigned i = 0; i < ElementCount; ++i) {
+                    auto &e = candidate.elements[mode][i];
+                    const auto &next = updated.elements[mode][i];
+                    e.x = next.x; e.y = next.y; e.width = next.width; e.height = next.height;
+                    if (i >= 6) e.visible = next.visible;
+                }
+            candidate.layout = LayoutPreset::Cards;
+        }
+    }
     ThemeMigration::adoptStockScope(candidate); // An older firmware's stock Scope geometry.
+    output = candidate;
     return true;
 }
 }

@@ -37,6 +37,12 @@ bool choice(JsonObjectConst object, const char *key, T &output, const char *cons
         }
     return false;
 }
+// Themes before the trigger followed its record kept "trigger_position" (0..1000) in the view; the
+// record now places its trigger (Viewport), so the key is still checked but never applied.
+bool legacyTriggerPosition(JsonObjectConst object) {
+    uint16_t position = 0;
+    return integer(object, "trigger_position", position) && position <= 1000;
+}
 } // namespace
 bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     auto o = output;
@@ -48,7 +54,7 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         !choice(object, "grid", o.grid, grids) || !choice(object, "math", o.math, math) ||
         !choice(object,"reduction",o.reduction,reductions) || !choice(object,"interpolation",o.interpolation,interpolations) ||
         !integer(object, "zoom", o.zoom) || !integer(object, "pan_permille", o.pan) ||
-        !integer(object, "trigger_position", o.triggerPosition) ||
+        !legacyTriggerPosition(object) ||
         !integer(object, "persistence_ms", o.persistenceMs) || !integer(object, "averaging", o.averaging) ||
         !flag(object, "lock_trigger", o.lockTrigger) || !flag(object, "show_trigger", o.showTrigger) ||
         !flag(object, "show_zero", o.showZero) || !flag(object, "glow", o.glow) ||

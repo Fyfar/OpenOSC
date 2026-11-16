@@ -1,4 +1,5 @@
 #include "openosc/platform/watchdog.hpp"
+#include "openosc/platform/stack_guard.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/clocks.hpp"
@@ -25,6 +26,7 @@ private:
 
 int main() {
     using namespace openosc;
+    StackGuard::arm(); // The lowest stack words, far below main's frame now; checked by the main loop.
     if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     NorFlash nor;

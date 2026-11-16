@@ -35,7 +35,6 @@ struct Theme {
 class ThemeParser {
 public:
     static constexpr size_t MaxBytes = 10240;
-    // Parsed in place: `output` is the valid theme on true and unspecified on false.
     static bool parse(const char* json, size_t bytes, Theme& output);
 };
 }

@@ -39,7 +39,7 @@ struct Options {
     ChannelOptions channels[2];
     CursorOptions cursors;
     scope::SpectrumOptions spectrum;
-    uint16_t zoom = 1, triggerPosition = 250, persistenceMs = 0;
+    uint16_t zoom = 1, persistenceMs = 0;
     int16_t pan = 0;
     uint8_t averaging = 1, zoomOut = 1; // zoomOut views more than one screen of a longer record.
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,

@@ -7,7 +7,7 @@ namespace openosc::plot {
 bool Options::valid() const {
     if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() ||
         unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom ||
-        zoom > 256 || pan < -1000 || pan > 1000 || triggerPosition > 1000 ||
+        zoom > 256 || pan < -1000 || pan > 1000 ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
         !averaging || averaging > 64 || (averaging & (averaging - 1)) ||
         (heldTimebaseNs && std::find(std::begin(scope::Timebases::Values), std::end(scope::Timebases::Values),
@@ -30,7 +30,7 @@ void Options::restoreHeldView(const Options &saved) {
 bool Options::sameTransform(const Options &b) const {
     if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || pan != b.pan || heldTimebaseNs != b.heldTimebaseNs ||
         lockTrigger != b.lockTrigger ||
-        triggerPosition != b.triggerPosition || averaging != b.averaging || math != b.math ||
+        averaging != b.averaging || math != b.math ||
         reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
         return false;
     for (unsigned i = 0; i < 2; ++i) {

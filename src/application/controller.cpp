@@ -1,5 +1,6 @@
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/application/controller.hpp"
+#include "openosc/platform/stack_guard.hpp"
 #include "openosc/storage/layout.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
@@ -85,6 +86,7 @@ namespace openosc {
     while (true) {
         performance_.tick(DWT->CYCCNT);
         Watchdog::heartbeat(); // The one proof that the application's loop goes on (docs/WATCHDOG.md).
+        StackGuard::check();   // A stack that reached .bss resets (recorded) instead of running on (issue #8).
         Board::service();
         const uint32_t now = Board::milliseconds();
         data_.poll(now);

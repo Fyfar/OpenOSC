@@ -5,19 +5,17 @@
 #include "openosc/storage/json_files.hpp"
 
 namespace openosc {
-namespace {
-// The file's text lies in the JSON workspace, as its document does (PreferencesJson): on the stack
-// the two made a save from the main loop overflow it.
-constexpr size_t TextBytes = PreferencesJson::MaxBytes + 1;
-static_assert(TextBytes <= JsonWorkspace::TextBytes, "The settings text exceeds the JSON workspace");
-}
 bool PreferencesFile::readValid(const char* path, Preferences& output, bool& storageError) const {
-    char *json = JsonWorkspace::text(); size_t bytes = 0; // SRAM4, not the stack (TextBytes).
-    const auto read = JsonFiles::read(path, json, TextBytes, bytes);
+    static_assert(PreferencesJson::MaxBytes + 1 <= JsonWorkspace::TextCapacity);
+    JsonWorkspace::Text json; size_t bytes = 0; // Off the stack (JsonWorkspace).
+    if (!json || JsonWorkspace::documentHeld()) { storageError = true; return false; } // Busy, not invalid.
+    const auto read = JsonFiles::read(path, json.data(), PreferencesJson::MaxBytes + 1, bytes);
     storageError = read == JsonFiles::ReadResult::StorageError;
-    return read == JsonFiles::ReadResult::Complete && PreferencesJson::parse(json, bytes, output);
+    return read == JsonFiles::ReadResult::Complete && PreferencesJson::parse(json.data(), bytes, output);
 }
 bool PreferencesFile::load() {
+    // A busy workspace is unreadable now: nothing changes, nothing is archived or written.
+    if (!JsonWorkspace::idle()) { error_ = "CANNOT READ SETTINGS JSON"; repaired_ = restored_ = false; return false; }
     values_ = Preferences{}; error_ = nullptr; repaired_ = restored_ = false;
     if (!fs_.mounted()) { error_ = "SETTINGS DISK IS NOT AVAILABLE"; return false; }
     bool storageError = false;
@@ -38,9 +36,9 @@ bool PreferencesFile::load() {
 bool PreferencesFile::save(const Preferences& values) {
     error_ = nullptr;
     if (!fs_.mounted() || storage::ensureDirectory(storage::Layout::Settings) != FR_OK) { error_ = "SETTINGS DISK IS NOT AVAILABLE"; return false; }
-    char *json = JsonWorkspace::text();
-    const size_t bytes = PreferencesJson::encode(values, json, TextBytes);
-    if (!bytes || !JsonFiles::write(Path, json, bytes)) { error_ = "CANNOT SAVE SETTINGS JSON"; return false; }
+    JsonWorkspace::Text json; // Off the stack (JsonWorkspace).
+    const size_t bytes = json ? PreferencesJson::encode(values, json.data(), PreferencesJson::MaxBytes + 1) : 0;
+    if (!bytes || !JsonFiles::write(Path, json.data(), bytes)) { error_ = "CANNOT SAVE SETTINGS JSON"; return false; }
     values_ = values;
     return true;
 }

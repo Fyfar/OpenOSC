@@ -58,7 +58,6 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     return ModeChange::Selected;
 }
 bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode) {
-    const auto previousPosition=data_.scopeRequest().trigger.position;
     const bool applied = mode == ScopeApply::Resume ? data_.resumeScope(request)
         : mode == ScopeApply::StageIfHeld && data_.scopeHeld() ? data_.stageScope(request) : data_.configureScope(request);
     if (!applied) return false;
@@ -67,10 +66,6 @@ bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now
     triggerFollow_.observe(active.trigger.level, source, active.frontend.position[source]);
     const auto previous = prefs_;
     InstrumentState::capture(active, prefs_);
-    if (uiReady_ && previousPosition!=request.trigger.position) {
-        auto options=view_.waveform().options(); options.triggerPosition=request.trigger.position;
-        view_.waveform().configure(options); queuePlotSave(now);
-    }
     state_.scope.timebaseNs = prefs_.timebaseNs;
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     if (std::memcmp(&previous, &prefs_, sizeof prefs_)) changed(now);

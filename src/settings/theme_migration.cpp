@@ -32,8 +32,7 @@ bool ThemeMigration::legacyStock(unsigned mode, unsigned element, const ElementS
     if (mode == 1 && element == unsigned(ElementId::Measurements)) return at(s, legacy.summary);
     return mode == 0 && element == unsigned(ElementId::Waveform) && at(s, {10, 38, 300, 152});
 }
-// Not inlined: its stock theme (2.3 KiB) stays out of the caller's frame.
-__attribute__((noinline)) bool ThemeMigration::adoptStockMeter(Theme &theme) {
+bool ThemeMigration::adoptStockMeter(Theme &theme) {
     auto &meter = theme.elements[unsigned(MeasurementMode::Multimeter)];
     auto &reading = meter[unsigned(ElementId::Reading)], &unit = meter[unsigned(ElementId::Unit)];
     auto &details = meter[unsigned(ElementId::Details)], &summary = meter[unsigned(ElementId::Measurements)];
@@ -55,7 +54,7 @@ __attribute__((noinline)) bool ThemeMigration::adoptStockMeter(Theme &theme) {
     }
     return false;
 }
-__attribute__((noinline)) bool ThemeMigration::adoptStockScope(Theme &theme) {
+bool ThemeMigration::adoptStockScope(Theme &theme) {
     if (theme.layout == LayoutPreset::Legacy) return false;
     auto &scope = theme.elements[0];
     auto &waveform = scope[unsigned(ElementId::Waveform)], &footer = scope[unsigned(ElementId::Measurements)];

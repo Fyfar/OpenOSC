@@ -30,6 +30,9 @@ public:
     static void expect(uint32_t ms);  // An operation of up to `ms` (bounded) in this pass.
     // A failure the image cannot continue from: recorded, never fed again, reset by the watchdog.
     [[noreturn]] static void fatal(uint32_t error);
+    // The application stack reached its guard (StackGuard): recorded as StackOverflow (detail: the
+    // guard words that survived), never fed again, reset by the watchdog like fatal().
+    [[noreturn]] static void stackOverflow(uint32_t survivedWords);
     // Soft off only (PowerControl::powerOff, docs/POWER.md): feeds the IWDG and an inherited WWDG
     // whatever the context, interrupts masked and the ms tick stopped included. Nothing else may.
     static void terminalFeed();

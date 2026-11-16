@@ -1,5 +1,5 @@
 #include "openosc/settings/theme_json.hpp"
-#include "openosc/settings/theme_document.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include "openosc/settings/plot_json.hpp"
 #include <cstdio>
 
@@ -16,7 +16,9 @@ template <class T> void overrideValue(JsonObject object, const char *name, T val
 }
 size_t ThemeJson::encode(const Theme& theme, char* output, size_t capacity) {
     if(!theme.plot.valid())return 0;
-    auto &document = ThemeScratch::document();
+    JsonWorkspace::Document<ThemeDocumentCapacity> lease;
+    if (!lease) return 0;
+    auto &document = *lease;
     document["schema"] = 1;
     static constexpr const char *layouts[] = {"cards", "compact", "legacy"};
     if (unsigned(theme.layout) >= 3) return 0;

@@ -1,8 +1,8 @@
 #include "openosc/settings/preferences_json.hpp"
 #include "openosc/settings/arrangement_json.hpp"
 #include "openosc/settings/json_input.hpp"
-#include "openosc/settings/instrument_json.hpp"
 #include "openosc/settings/json_workspace.hpp"
+#include "openosc/settings/instrument_json.hpp"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -32,10 +32,10 @@ bool section(JsonObjectConst root, const char *key) {
 bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output) {
     if (bytes > MaxBytes || !JsonInput::completeObject(input, bytes, 6))
         return false;
-    auto &document = JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
-    if (deserializeJson(document, input, bytes, DeserializationOption::NestingLimit(6)))
+    JsonWorkspace::Document<DocumentBytes> lease; // Off the stack (JsonWorkspace).
+    if (!lease || deserializeJson(*lease, input, bytes, DeserializationOption::NestingLimit(6)))
         return false;
-    JsonObjectConst root = document.as<JsonObjectConst>();
+    JsonObjectConst root = lease->as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>() != 1 || !section(root, "display") ||
         !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator"))
         return false;
@@ -158,7 +158,9 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
 size_t PreferencesJson::encode(const Preferences &values, char *output, size_t capacity, bool pretty) {
     if (!values.valid())
         return 0;
-    auto &document = JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
+    JsonWorkspace::Document<DocumentBytes> lease; // Off the stack (JsonWorkspace).
+    if (!lease) return 0;
+    auto &document = *lease;
     document["schema"] = 1;
     document["mode"] = InstrumentModeKeys[values.mode];
     document["display"]["brightness"] = values.brightness;

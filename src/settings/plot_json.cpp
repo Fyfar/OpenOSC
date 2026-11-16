@@ -15,7 +15,6 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     root["interpolation"]=interpolations[unsigned(o.interpolation)];
     root["zoom"] = o.zoom;
     root["pan_permille"] = o.pan;
-    root["trigger_position"] = o.triggerPosition;
     root["persistence_ms"] = o.persistenceMs;
     root["averaging"] = o.averaging;
     root["lock_trigger"] = o.lockTrigger;

@@ -2,7 +2,7 @@
 #include "openosc/storage/directories.hpp"
 #include "openosc/storage/layout.hpp"
 #include "openosc/settings/theme_json.hpp"
-#include "openosc/settings/theme_document.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include "openosc/storage/json_files.hpp"
 #include "openosc/storage/json_profile.hpp"
 #include <cstring>
@@ -13,21 +13,30 @@ namespace openosc {
 // icon stops before anything is archived or written. A restored previous theme is written back as
 // theme.json; with neither valid, the defaults are.
 bool ThemeStore::reload() {
+    // A busy workspace is unreadable now: the theme in force, the file and its names stay.
+    if (!JsonWorkspace::idle()) { error_ = "CANNOT READ THEME JSON"; repaired_ = restored_ = false; return false; }
     error_ = nullptr; repaired_ = restored_ = false;
     if (!fs_.mounted()) { error_ = "STORAGE NOT AVAILABLE"; return false; }
     char previous[JsonFiles::PathBytes];
     if (!JsonFiles::previousPath(storage::Layout::ThemeFile, previous, sizeof previous)) { error_ = "CANNOT READ THEME JSON"; return false; }
-    Theme candidate;
+    JsonWorkspace::ThemeLease slot(JsonWorkspace::ThemeSlot::Store); // Off the stack (JsonWorkspace).
+    if (!slot) { error_ = "CANNOT READ THEME JSON"; return false; }
+    Theme &candidate = slot.make([] { return Theme{}; });
     bool resourceError = false;
     using Load = JsonProfile::Load;
     using Verdict = JsonProfile::Verdict;
-    const auto load = JsonProfile::load(storage::Layout::ThemeFile, previous, ThemeScratch::input(), ThemeScratch::InputCapacity, repaired_,
-        [&](const char *text, size_t bytes) {
-            if (!ThemeParser::parse(text, bytes, candidate)) return Verdict::Invalid;
-            const auto assets = resources(candidate);
-            resourceError = assets == ResourceState::StorageError;
-            return assets == ResourceState::Valid ? Verdict::Valid : resourceError ? Verdict::StorageError : Verdict::Invalid;
-        });
+    Load load;
+    {   // The text is held only while the file is read: a restoring write() takes it again.
+        JsonWorkspace::Text text;
+        if (!text) { error_ = "CANNOT READ THEME JSON"; return false; }
+        load = JsonProfile::load(storage::Layout::ThemeFile, previous, text.data(), text.capacity(), repaired_,
+            [&](const char *json, size_t bytes) {
+                if (!ThemeParser::parse(json, bytes, candidate)) return Verdict::Invalid;
+                const auto assets = resources(candidate);
+                resourceError = assets == ResourceState::StorageError;
+                return assets == ResourceState::Valid ? Verdict::Valid : resourceError ? Verdict::StorageError : Verdict::Invalid;
+            });
+    }
     switch (load) {
     case Load::Current: theme_ = candidate; return true;
     case Load::Previous:
@@ -38,15 +47,16 @@ bool ThemeStore::reload() {
     case Load::ArchiveError: error_ = "CANNOT PRESERVE INVALID THEME"; return false;
     case Load::Missing: case Load::Repaired: break;
     }
-    candidate = Theme::defaults();
+    slot.make([] { return Theme::defaults(); });
     if (!write(candidate)) { error_ = "CANNOT CREATE DEFAULT THEME JSON"; return false; }
     theme_ = candidate;
     return true;
 }
 bool ThemeStore::write(const Theme &theme) {
-    char *buffer = ThemeScratch::input();
-    const size_t length = ThemeJson::encode(theme, buffer, ThemeScratch::InputCapacity);
-    return length && storage::ensureDirectory(storage::Layout::Ui) == FR_OK && JsonFiles::write(storage::Layout::ThemeFile, buffer, length);
+    JsonWorkspace::Text text;
+    if (!text) return false;
+    const size_t length = ThemeJson::encode(theme, text.data(), text.capacity());
+    return length && storage::ensureDirectory(storage::Layout::Ui) == FR_OK && JsonFiles::write(storage::Layout::ThemeFile, text.data(), length);
 }
 ThemeStore::ResourceState ThemeStore::resources(const Theme& theme) {
     for (const auto& screen : theme.elements) {

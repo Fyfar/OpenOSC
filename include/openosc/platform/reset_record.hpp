@@ -7,7 +7,8 @@ namespace openosc {
 // images never place data there and the factory boot's stack starts at 0x2001EEF0. That the factory
 // boot leaves it intact across a reset is NOT established; the record is used only when it validates.
 struct ResetRecord {
-    enum class Cause : uint32_t { None, Fault, Interrupt, InitFailure, Stall };
+    // StackOverflow: the application stack reached its guard above .bss (StackGuard).
+    enum class Cause : uint32_t { None, Fault, Interrupt, InitFailure, Stall, StackOverflow };
     enum class Source : uint32_t { Recovery = 1, Application = 2 };
     static constexpr uint32_t Address = 0x2001ff80, Magic = 0x57444f47; // "WDOG"
     uint32_t magic, cause, source, pc, lr, excReturn, cfsr, hfsr, detail, check;
@@ -23,7 +24,7 @@ struct ResetRecord {
     }
     static bool valid(const volatile ResetRecord &r) {
         return r.magic == Magic && r.check == checksum(r) && r.cause >= uint32_t(Cause::Fault) &&
-               r.cause <= uint32_t(Cause::Stall);
+               r.cause <= uint32_t(Cause::StackOverflow);
     }
 #if defined(__arm__) || defined(__thumb__)
     static volatile ResetRecord &retained() { return *reinterpret_cast<volatile ResetRecord *>(Address); }

@@ -5,12 +5,16 @@
 namespace openosc::plot {
 struct Viewport {
     // A held view at the next capture's time/div (Options::heldTimebaseNs) is not bounded by
-    // FrameMetadata::valid, which bounds only the record's own: its span stops here, so span * 1000
-    // (trigger position) and span * (width - 1) stay in int64. 180 MS/s at 20 s/div is below it.
+    // FrameMetadata::valid, which bounds only the record's own: its span stops here, so
+    // span * (width - 1) stays in int64. 180 MS/s at 20 s/div is below it.
     static constexpr uint64_t MaximumHeldSpanQ16 = uint64_t(1) << 53;
     int64_t startQ16 = 0;
     uint64_t spanQ16 = 0;
     uint16_t width = 0, height = 0;
+    // A triggered record is placed by its own pretrigger: the trigger lies as far into the window as
+    // it lies in the record (triggerIndex / (samples - 1)), so a window no longer than the record
+    // stays within it. That fraction is the position the capture was made with; neither a saved view
+    // (theme.json) nor the next RUN's request can move it.
     bool calculate(const scope::FrameMetadata &frame, const Options &options, unsigned w, unsigned h);
     int64_t position(unsigned x) const;
     int sampleX(uint32_t index) const;
@@ -24,6 +28,10 @@ struct Viewport {
     bool operator==(const Viewport &o) const {
         return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height;
     }
+private:
+    // The window's Q16 length before the trigger: spanQ16 * triggerIndex / (samples - 1), exact
+    // (floor) without the 64-bit product, as quotient and remainder.
+    uint64_t pretrigger(const scope::FrameMetadata &m) const;
 };
 struct Axis {
     int32_t zeroQ8 = 0, codesPerDivisionQ8 = 8192;

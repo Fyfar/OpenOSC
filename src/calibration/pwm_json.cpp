@@ -1,7 +1,7 @@
 #include "openosc/calibration/pwm_json.hpp"
 #include "openosc/settings/json_input.hpp"
-#include "openosc/settings/json_workspace.hpp"
 #include "openosc/acquisition/ranges.hpp"
+#include "openosc/settings/json_workspace.hpp"
 #include <ArduinoJson.h>
 
 namespace openosc::calibration {
@@ -11,7 +11,9 @@ constexpr size_t DocumentBytes=JSON_OBJECT_SIZE(6)+JSON_ARRAY_SIZE(2)+2*JSON_ARR
 }
 bool PwmJson::parse(const char *text,size_t bytes,const CalibrationData &factory,PwmProfile &output) {
     if (bytes>MaxBytes || !JsonInput::completeObject(text,bytes,5)) return false;
-    auto &document=JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
+    JsonWorkspace::Document<DocumentBytes> lease; // Off the stack (JsonWorkspace).
+    if (!lease) return false;
+    auto &document=*lease;
     if (deserializeJson(document,text,bytes,DeserializationOption::NestingLimit(5))) return false;
     const auto root=document.as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>()!=1 ||
@@ -44,7 +46,9 @@ bool PwmJson::parse(const char *text,size_t bytes,const CalibrationData &factory
 }
 size_t PwmJson::encode(const PwmProfile &values,const CalibrationData &factory,char *output,size_t capacity) {
     if (!values.valid(factory) || !output || !capacity) return 0;
-    auto &document=JsonWorkspace::document<StaticJsonDocument<DocumentBytes>>(); // SRAM4, not the stack.
+    JsonWorkspace::Document<DocumentBytes> lease; // Off the stack (JsonWorkspace).
+    if (!lease) return 0;
+    auto &document=*lease;
     document["schema"]=1; document["enabled"]=values.enabled;
     document["factory_crc16"]=values.factoryCrc;
     auto positions=document.createNestedArray("positions");
