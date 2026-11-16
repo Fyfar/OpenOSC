@@ -23,15 +23,19 @@ void ImageBrowserView::list(lv_obj_t *parent,const Theme &theme,const ImageList 
         return;
     }
     for (unsigned i=0;i<images.visible && i<ImageList::Rows;++i)
-        MenuRow(parent,32+i*34,30,images.names[i],"",images.first+i==images.selected,theme,theme.accent);
+        MenuRow(parent,32+i*26,24,images.names[i],"",images.first+i==images.selected,theme,theme.accent); // Five within the 170 px menu.
 }
-void ImageBrowserView::preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize) {
+void ImageBrowserView::preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize, const char *keys) {
     lv_obj_clean(parent);
-    if (!fullSize) {
-    auto *title=text(parent,name,8,3,252);
-    lv_obj_set_style_text_color(title,lv_color_hex(theme.accent),0);
-    auto *close=text(parent,"×",288,3,24);
-    lv_obj_set_style_text_align(close,LV_TEXT_ALIGN_CENTER,0);
+    if (!fullSize) { // The name, then what the keys do (the cards are hidden under the picture).
+        const int hint = keys && *keys ? Elements::textWidth(keys) + 4 : 0;
+        auto *title=text(parent,name,8,3,304-8-hint-6);
+        lv_obj_set_style_text_color(title,lv_color_hex(theme.accent),0);
+        if (hint) {
+            auto *line=text(parent,keys,312-hint-4,3,hint);
+            lv_obj_set_style_text_color(line,lv_color_hex(theme.muted),0);
+            lv_obj_set_style_text_align(line,LV_TEXT_ALIGN_RIGHT,0);
+        }
     }
     bitmap_={};
     bitmap_.header.magic=LV_IMAGE_HEADER_MAGIC;

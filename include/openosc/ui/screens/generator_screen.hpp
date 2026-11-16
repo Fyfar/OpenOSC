@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/ui/screens/instrument_screen.hpp"
+#include "openosc/ui/components/soft_keys.hpp"
 
 namespace openosc::ui {
 // What F1-F4 do on the generator screen now: its own keys (Main: Wave, Frequency, Params, Output), or
@@ -18,13 +19,15 @@ public:
     void activate(const ApplicationState &state) override;
     void update(const generator::Snapshot &snapshot);
     void status(const generator::Snapshot &snapshot);
-    void keys(const GeneratorKeys &keys); // The cards' captions for what F1-F4 do now.
+    // A panel's keys (ParameterBar::context) with the last output's values; the texts live here.
+    const SoftKeys &keys(const GeneratorKeys &keys);
 
 private:
-    void cards(); // The four cards from keys_ and the last snapshot: one place for captions and values.
+    void values(); // The cards' values from the last output: shape, frequency, duty or level.
+    void cards();  // The screen's own four cards (Main).
     generator::Snapshot snapshot_;
-    GeneratorKeys keys_;
-    char unit_[8] = "";
+    SoftKeys keys_;
+    char shape_[16] = "--", frequency_[32] = "--", params_[24] = "Fixed", unit_[8] = "";
     bool shown_ = false; // snapshot_ holds an update: activate() shows it rather than placeholders.
 };
 } // namespace openosc::ui

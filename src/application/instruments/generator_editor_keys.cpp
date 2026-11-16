@@ -9,7 +9,7 @@ namespace openosc {
 // switch stays its own action. F1/F2/F3 go to the other panels (switchGeneratorPanel).
 void ApplicationController::generatorEditorKeys(uint32_t keys, uint32_t now) {
     generatorPanelKeys(keys, now);
-    showGeneratorKeys();
+    refreshSoftKeys();
 }
 void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
     if (switchGeneratorPanel(keys, now)) return;
@@ -18,22 +18,11 @@ void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
     generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave());
     view_.properties(generatorEditor_, navigator_);
 }
-// F1 Wave, F2 Frequency (Unit in FREQUENCY), F3 Params, F4 Back or Cancel: the cards say what the keys
-// do in the panel open now; closed, the screen's own cards with the output as it is.
-void ApplicationController::showGeneratorKeys() {
-    if (state_.mode != MeasurementMode::Generator) return;
-    using Keys = ui::GeneratorKeys::Panel;
-    ui::GeneratorKeys keys;
-    if (panel_ == Panel::Frequency) keys = {Keys::Frequency, true, frequencyEditor_.unit()};
-    else if (panel_ == Panel::Generator)
-        keys = {generatorEditor_.wave() ? Keys::Wave : Keys::Params, navigator_.mode() != ui::PropertyNavigator::Mode::Browse, nullptr};
-    view_.generatorKeys(keys);
-}
 void ApplicationController::openGeneratorEditor(bool wave) {
     view_.focusParameter(wave ? 0 : 2);
     generatorEditor_.begin(data_.generator().settings(), wave);
     openPanel(Panel::Generator, generatorEditor_);
-    showGeneratorKeys();
+    refreshSoftKeys();
 }
 void ApplicationController::openFrequencyEditor() {
     using Caps = generator::Capabilities;
@@ -43,7 +32,7 @@ void ApplicationController::openFrequencyEditor() {
                            Caps::MinimumMillihertz);
     panel_ = Panel::Frequency;
     view_.frequencyEditor(frequencyEditor_);
-    showGeneratorKeys();
+    refreshSoftKeys();
 }
 // The field in progress is applied as on leaving it (MENU): a number's draft, the option a list
 // shows, the frequency being edited. Refused, nothing changes, the draft stays on show and the panel

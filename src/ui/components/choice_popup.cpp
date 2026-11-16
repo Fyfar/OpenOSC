@@ -13,8 +13,10 @@ void ChoicePopup::show(lv_obj_t *menu, int top, const PropertyList &list, unsign
     }
     const unsigned options = list.options(row), current = list.option(row);
     const unsigned first = draft / Visible * Visible, shown = options - first < Visible ? options - first : Visible;
-    lv_obj_set_pos(box_, 304 - Width - 8, top);
-    lv_obj_set_size(box_, Width, 22 + int(shown) * RowHeight);
+    // Within the menu: a list near its bottom opens upwards as far as it needs.
+    const int height = 22 + int(shown) * RowHeight, room = lv_obj_get_height(menu) - 4;
+    lv_obj_set_pos(box_, 304 - Width - 8, top + height > room ? (room - height > 2 ? room - height : 2) : top);
+    lv_obj_set_size(box_, Width, height);
     lv_obj_set_style_bg_color(box_, lv_color_hex(theme.panel), 0);
     lv_obj_set_style_bg_opa(box_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(box_, 1, 0);

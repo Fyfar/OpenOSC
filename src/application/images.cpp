@@ -94,7 +94,8 @@ void ApplicationController::serviceImages(uint32_t now) {
     if (imageReader_.busy()) return;
     if (imageReader_.ready()) {
         imageShowing_=true;
-        view_.imagePreview(images_.name(),screenshot::previewMemory(),imageFullSize_);
+        char keys[64]; imageSoftKeys().line(keys,sizeof keys);
+        view_.imagePreview(images_.name(),screenshot::previewMemory(),imageFullSize_,keys);
     } else { showImages(); view_.notify(imageReader_.error(),now); }
 }
 } // namespace openosc

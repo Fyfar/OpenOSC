@@ -66,7 +66,10 @@ public:
         meter_.fastBar(result,status,relative,now);
     }
     void generatorStatus(const generator::Snapshot &snapshot) { generator_.status(snapshot); }
-    void generatorKeys(const ui::GeneratorKeys &keys) { generator_.keys(keys); } // What F1-F4 do now.
+    // What F1-F4 do now (ui::SoftKeys): a context over the instrument screen's cards, or (nullptr)
+    // the screen's own cards again, as the screen last set them.
+    void softKeys(const ui::SoftKeys *keys) { if (keys) host_.parameters().context(*keys); else host_.parameters().release(); }
+    const ui::SoftKeys &generatorKeys(const ui::GeneratorKeys &keys) { return generator_.keys(keys); }
     void generatorActive(bool enabled);
     void usbConnected(bool connected);
     void battery(const power::BatteryState &state) { battery_.update(state); }
@@ -87,7 +90,7 @@ public:
                   const char *persistence);
     void information(const ui::SettingsMenu &menu, const DeviceInfo &info);
     void images(const ui::ImageList &images);
-    void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false);
+    void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
     void notify(const char *text, uint32_t now);
     const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
     void powerHold(int percent) { powerHold_.show(percent); } // PowerHold::percent; -1 hides.
@@ -99,6 +102,7 @@ private:
     }
     static const lv_font_t *font(unsigned size) { return ui::Elements::font(size); }
     void menuFrame(const char *title, bool instrument = false, bool retained = false);
+    static constexpr int MenuTop = 62, MenuHeight = 170; // Under the cards (22..53), above the bottom.
     void choice(const ui::PropertyList &list, const ui::PropertyNavigator &navigator, int top); // The open list, if any.
     ui::ChoicePopup choicePopup_;
     ui::GeneratorPreview draftPreview_;

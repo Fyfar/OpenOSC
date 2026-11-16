@@ -9,7 +9,6 @@ constexpr const char *Shapes[] = {"Sine", "Square", "Triangle", "Half sine", "Po
 const char *shapeName(generator::Shape shape) { return unsigned(shape) < 6 ? Shapes[unsigned(shape)] : "Invalid"; }
 } // namespace
 void GeneratorScreen::activate(const ApplicationState &) {
-    keys_ = {};
     if (shown_) { update(snapshot_); return; } // The output as it is: never a placeholder OFF while ON.
     cards(); // Nothing shown yet: "--" and OFF.
     host_.parameters().select(1);
@@ -19,11 +18,20 @@ void GeneratorScreen::activate(const ApplicationState &) {
     host_.elements().text(ElementId::Details, "SET FREQUENCY");
     host_.elements().text(ElementId::Measurements, "");
 }
-void GeneratorScreen::keys(const GeneratorKeys &keys) {
-    keys_ = keys;
+// F1 Wave, F2 Frequency (Unit in FREQUENCY: Hz/kHz/MHz), F3 Params, F4 Back from the list or Cancel
+// of a field or the frequency; the open panel's card accented.
+const SoftKeys &GeneratorScreen::keys(const GeneratorKeys &keys) {
+    using Panel = GeneratorKeys::Panel;
+    values();
     std::snprintf(unit_, sizeof unit_, "%s", keys.unit ? keys.unit : "");
-    keys_.unit = unit_;
-    cards();
+    keys_ = {};
+    keys_.keys[0] = {"Wave", shape_, true};
+    keys_.keys[1] = keys.panel == Panel::Frequency ? SoftKey{"Unit", unit_, true} : SoftKey{"Frequency", frequency_, true};
+    keys_.keys[2] = {"Params", params_, true};
+    keys_.keys[3] = keys.panel == Panel::Frequency ? SoftKey{"Cancel", "Frequency", true}
+                  : keys.editing ? SoftKey{"Cancel", "Field", true} : SoftKey{"Back", "Main", true};
+    keys_.selected = keys.panel == Panel::Wave ? 0 : keys.panel == Panel::Frequency ? 1 : keys.panel == Panel::Params ? 2 : SoftKeys::None;
+    return keys_;
 }
 void GeneratorScreen::status(const generator::Snapshot &snapshot) {
     // The ZT706S module answers asynchronously: SENDING while a frame is on the wire or waits for its
@@ -64,26 +72,22 @@ void GeneratorScreen::update(const generator::Snapshot &snapshot) {
     host_.preview().update(snapshot.requested,
         host_.theme().elements[unsigned(MeasurementMode::Generator)][unsigned(ElementId::Preview)].color);
 }
-// The cards: the screen's own (Main) or an open panel's keys, values from the last output.
-void GeneratorScreen::cards() {
-    using Panel = GeneratorKeys::Panel;
+void GeneratorScreen::values() {
     const auto &s = snapshot_.requested;
-    char frequency[32] = "--", params[24], level[24];
-    if (shown_) plot::Format::quantity(s.frequencyHz.value(), "Hz", frequency, sizeof frequency);
-    generator::LevelText::name(s, level, sizeof level);
+    std::snprintf(shape_, sizeof shape_, "%s", shown_ ? shapeName(s.shape) : "--");
+    if (shown_) plot::Format::quantity(s.frequencyHz.value(), "Hz", frequency_, sizeof frequency_);
     const unsigned duty = s.dutyPermille; // 50.5 % as set, not cut to 50 %.
-    if (s.shape != generator::Shape::Square) std::snprintf(params, sizeof params, "%s", level);
-    else if (duty % 10) std::snprintf(params, sizeof params, "%u.%u%%", duty / 10, duty % 10);
-    else std::snprintf(params, sizeof params, "%u%%", duty / 10);
+    if (!shown_) std::snprintf(params_, sizeof params_, "Fixed");
+    else if (s.shape != generator::Shape::Square) generator::LevelText::name(s, params_, sizeof params_);
+    else if (duty % 10) std::snprintf(params_, sizeof params_, "%u.%u%%", duty / 10, duty % 10);
+    else std::snprintf(params_, sizeof params_, "%u%%", duty / 10);
+}
+void GeneratorScreen::cards() {
+    values();
     auto &bar = host_.parameters();
-    bar.item(0, "Wave", shown_ ? shapeName(s.shape) : "--");
-    if (keys_.panel == Panel::Frequency) bar.item(1, "Unit", keys_.unit); // F2 steps Hz/kHz/MHz there.
-    else bar.item(1, "Frequency", frequency);
-    bar.item(2, "Params", shown_ ? params : "Fixed");
-    if (keys_.panel == Panel::Main) bar.item(3, "Output", snapshot_.enabled ? "ON" : "OFF");
-    else if (keys_.editing || keys_.panel == Panel::Frequency) bar.item(3, "Cancel", keys_.panel == Panel::Frequency ? "Frequency" : "Field");
-    else bar.item(3, "Back", "Main");
-    if (keys_.panel != Panel::Main)
-        bar.select(keys_.panel == Panel::Wave ? 0 : keys_.panel == Panel::Frequency ? 1 : 2);
+    bar.item(0, "Wave", shape_);
+    bar.item(1, "Frequency", frequency_);
+    bar.item(2, "Params", params_);
+    bar.item(3, "Output", snapshot_.enabled ? "ON" : "OFF");
 }
 } // namespace openosc::ui

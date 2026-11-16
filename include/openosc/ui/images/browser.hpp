@@ -11,7 +11,8 @@ struct ImageList {
 class ImageBrowserView {
 public:
     void list(lv_obj_t *parent,const Theme &theme,const ImageList &images);
-    void preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize = false);
+    // keys: the live keys in one line (SoftKeys::line), in the fitted view's header.
+    void preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
 private:
     lv_image_dsc_t bitmap_{};
 };

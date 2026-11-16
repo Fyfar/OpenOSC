@@ -9,7 +9,43 @@ void ApplicationController::showTrigger(const scope::FrameMetadata *shown) {
     view_.waveform().trigger(trigger.channel, shown ? scope::TriggerLevel::inFrame(trigger.level, settings, shown->channels[source]) : double(trigger.level));
     view_.scopeTrigger(trigger, settings);
 }
+// One decision for F1-F4's captions, from what the key handlers act on: Remote locks every local
+// key; rows (settings, panels, gain) go Back, or Cancel the field being edited; a confirmation and a
+// calibration Cancel; the image list Deletes (when there is an image) and goes Back, the preview also
+// changes its size (F2); the generator's panels keep their own keys. Nothing in front: the screen's.
+void ApplicationController::refreshSoftKeys() {
+    if (!uiReady_) return;
+    using Keys = ui::SoftKeys;
+    const bool editing = navigator_.mode() != ui::PropertyNavigator::Mode::Browse;
+    Keys keys;
+    if (remote_) keys = Keys::locked();
+    else if (state_.settingsOpen) keys = Keys::list(editing && !settingsMenu_.information());
+    else if (panel_ == Panel::Confirmation) keys = Keys::cancel("");
+    else if (panel_ == Panel::Zero) keys = editing ? Keys::list(true) : Keys::cancel("Calibration");
+    else if (panel_ == Panel::Images) keys = imageSoftKeys();
+    else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
+        using Generator = ui::GeneratorKeys::Panel;
+        ui::GeneratorKeys generator;
+        if (panel_ == Panel::Frequency) generator = {Generator::Frequency, true, frequencyEditor_.unit()};
+        else generator = {generatorEditor_.wave() ? Generator::Wave : Generator::Params, editing, nullptr};
+        view_.softKeys(&view_.generatorKeys(generator));
+        return;
+    } else if (panel_ != Panel::None) keys = Keys::list(editing);
+    else { view_.softKeys(nullptr); return; }
+    view_.softKeys(&keys);
+}
+// As imageKeys: F4 always (Back to the list, or out of it); F2 only in the preview (Full 1:1 or Fit);
+// F3 with an image, not while the list is being cleared.
+ui::SoftKeys ApplicationController::imageSoftKeys() const {
+    ui::SoftKeys keys;
+    const bool viewing = imageShowing_ || imageReader_.busy(), idle = !images_.clearing();
+    if (viewing && idle) keys.keys[1] = imageFullSize_ ? ui::SoftKey{"Fit", "", true} : ui::SoftKey{"Full", "1:1", true};
+    if (images_.count() && idle) keys.keys[2] = {"Delete", "", true};
+    keys.keys[3] = {"Back", "", true};
+    return keys;
+}
 void ApplicationController::displayData(uint32_t now) {
+    refreshSoftKeys();
     if (uint32_t(now-fpsAt_)>=1000) {
         const uint32_t flushes=display_.flushes();
         view_.fps(prefs_.showFps,(flushes-fpsFlushes_)*1000/uint32_t(now-fpsAt_));

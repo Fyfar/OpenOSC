@@ -193,7 +193,10 @@ private:
     bool finishGeneratorField(uint32_t now); // False: refused, nothing applied, the panel stays.
     void generatorPanelKeys(uint32_t keys, uint32_t now);  // generatorEditorKeys' work, before the captions.
     void frequencyPanelKeys(uint32_t keys, uint32_t now);  // frequencyKeys' work, before the captions.
-    void showGeneratorKeys(); // The cards' captions for the panel open now (GeneratorScreen::keys).
+    // F1-F4's captions for what is in front now (ui::SoftKeys), from the state the key handlers read:
+    // after keys and on every display pass, so background updates never leave other captions.
+    void refreshSoftKeys();
+    ui::SoftKeys imageSoftKeys() const; // The image list's and preview's keys (also the preview's header line).
     void startAuto(uint32_t now);
     void serviceAuto(uint32_t now);
     bool cancelAuto(uint32_t now,bool hold=false);

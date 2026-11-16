@@ -1,13 +1,28 @@
 #include "openosc/ui/components/parameter_bar.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace openosc::ui {
+namespace {
+// LVGL invalidates on every style write, equal or not: only a colour that differs is written, so a
+// context or selection that did not change draws nothing.
+void border(lv_obj_t *object, uint32_t color) {
+    if (!lv_color_eq(lv_obj_get_style_border_color(object, LV_PART_MAIN), lv_color_hex(color)))
+        lv_obj_set_style_border_color(object, lv_color_hex(color), 0);
+}
+void ink(lv_obj_t *object, uint32_t color) {
+    if (!lv_color_eq(lv_obj_get_style_text_color(object, LV_PART_MAIN), lv_color_hex(color)))
+        lv_obj_set_style_text_color(object, lv_color_hex(color), 0);
+}
+} // namespace
 lv_obj_t *ParameterBar::create(lv_obj_t *parent) {
     root_ = lv_obj_create(parent);
     lv_obj_remove_style_all(root_);
     lv_obj_set_scrollable(root_, false);
-    selected_ = Count;
+    selected_ = screenSelected_ = Count;
+    context_ = false;
+    for (unsigned i = 0; i < Count; ++i) { screen_[i] = {}; live_[i] = true; for (auto *&child : hidden_[i]) child = nullptr; }
     for (unsigned i = 0; i < Count; ++i) {
         cards_[i] = lv_obj_create(root_);
         lv_obj_remove_style_all(cards_[i]);
@@ -62,15 +77,14 @@ void ParameterBar::palette(const Theme &theme, const ElementStyle &style) {
     highlight_ = style.color;
     muted_ = theme.muted;
     selectedText_ = customFont_ = false;
-    const unsigned selected = selected_;
-    selected_ = Count;
+    if (screenSelected_ >= Count) screenSelected_ = 0;
+    if (!context_) selected_ = screenSelected_;
     for (unsigned i = 0; i < Count; ++i) {
         lv_obj_set_style_bg_color(cards_[i], lv_color_hex(background_), 0);
-        lv_obj_set_style_text_color(titles_[i], lv_color_hex(marked_[i] ? highlight_ : muted_), 0);
         lv_obj_set_style_text_font(values_[i], Elements::font(style.font), 0);
         lv_obj_set_style_text_font(titles_[i], Elements::font(12), 0);
     }
-    select(selected < Count ? selected : 0);
+    paint();
     arrange();
 }
 void ParameterBar::text(const lv_font_t *font, uint32_t color, bool selected) {
@@ -81,26 +95,87 @@ void ParameterBar::text(const lv_font_t *font, uint32_t color, bool selected) {
         if (lv_obj_get_style_text_font(values_[i], LV_PART_MAIN) != font) lv_obj_set_style_text_font(values_[i], font, 0);
         if (lv_obj_get_style_text_font(titles_[i], LV_PART_MAIN) != font) lv_obj_set_style_text_font(titles_[i], font, 0);
     }
-    const unsigned current = selected_;
-    selected_ = Count;
-    select(current);
+    paint();
     arrange();
 }
-void ParameterBar::select(unsigned index) {
-    if (selected_ == index) return;
-    selected_ = index;
+// The layer on show: the accented card's border and value in the highlight, a marked title in the
+// highlight, an inert key's texts muted.
+void ParameterBar::paint() {
     for (unsigned i = 0; i < Count; ++i) {
-        lv_obj_set_style_border_color(cards_[i], lv_color_hex(i == index ? highlight_ : border_), 0);
-        lv_obj_set_style_text_color(values_[i], lv_color_hex(i == index && !selectedText_ ? highlight_ : foreground_), 0);
+        const bool accent = i == selected_ && live_[i];
+        border(cards_[i], accent ? highlight_ : border_);
+        ink(values_[i], !live_[i] ? muted_ : accent && !selectedText_ ? highlight_ : foreground_);
+        ink(titles_[i], !context_ && screen_[i].marked ? highlight_ : muted_);
     }
+}
+void ParameterBar::select(unsigned index) {
+    screenSelected_ = index;
+    if (context_ || selected_ == index) return;
+    selected_ = index;
+    paint();
+}
+void ParameterBar::show(unsigned index, const char *title, const char *value) {
+    if (std::strcmp(lv_label_get_text(titles_[index]), title)) { lv_label_set_text(titles_[index], title); fit(index); }
+    if (std::strcmp(lv_label_get_text(values_[index]), value)) { lv_label_set_text(values_[index], value); fit(index); }
 }
 void ParameterBar::item(unsigned index, const char *title, const char *value, bool marked) {
     if (index >= Count) return;
-    if (std::strcmp(lv_label_get_text(titles_[index]), title)) { lv_label_set_text(titles_[index], title); fit(index); }
-    if (std::strcmp(lv_label_get_text(values_[index]), value)) { lv_label_set_text(values_[index], value); fit(index); }
-    if (marked != marked_[index]) {
-        marked_[index] = marked;
-        lv_obj_set_style_text_color(titles_[index], lv_color_hex(marked ? highlight_ : muted_), 0);
+    auto &card = screen_[index];
+    std::snprintf(card.title, sizeof card.title, "%s", title);
+    std::snprintf(card.value, sizeof card.value, "%s", value);
+    const bool remark = card.marked != marked;
+    card.marked = marked;
+    if (context_) return; // Kept for release().
+    show(index, card.title, card.value);
+    if (remark) paint();
+}
+void ParameterBar::decorations(bool visible) {
+    for (unsigned i = 0; i < Count; ++i) {
+        if (!visible) {
+            unsigned n = 0;
+            for (uint32_t c = 0; c < lv_obj_get_child_count(cards_[i]) && n < Decorations; ++c) {
+                auto *child = lv_obj_get_child(cards_[i], int32_t(c));
+                if (child == titles_[i] || child == values_[i] || lv_obj_is_hidden(child)) continue;
+                lv_obj_set_hidden(child, true);
+                hidden_[i][n++] = child;
+            }
+        } else {
+            for (auto *&child : hidden_[i]) { if (child) lv_obj_set_hidden(child, false); child = nullptr; }
+        }
     }
+}
+void ParameterBar::decorate(lv_obj_t *child, bool visible) {
+    if (!child) return;
+    for (unsigned i = 0; i < Count; ++i) {
+        if (lv_obj_get_parent(child) != cards_[i]) continue;
+        unsigned free = Decorations;
+        for (unsigned n = 0; n < Decorations; ++n) {
+            if (hidden_[i][n] == child) { if (!visible) hidden_[i][n] = nullptr; lv_obj_set_hidden(child, true); return; }
+            if (!hidden_[i][n] && free == Decorations) free = n;
+        }
+        if (context_ && visible && free < Decorations) { hidden_[i][free] = child; lv_obj_set_hidden(child, true); return; } // At release().
+    }
+    if (lv_obj_is_hidden(child) == visible) lv_obj_set_hidden(child, !visible);
+}
+void ParameterBar::context(const SoftKeys &keys) {
+    if (!context_) decorations(false);
+    context_ = true;
+    for (unsigned i = 0; i < Count; ++i) {
+        live_[i] = keys.keys[i].live;
+        show(i, keys.keys[i].title, keys.keys[i].value);
+    }
+    selected_ = keys.selected < Count && keys.keys[keys.selected].live ? keys.selected : Count;
+    paint();
+}
+void ParameterBar::release() {
+    if (!context_) return;
+    context_ = false;
+    for (unsigned i = 0; i < Count; ++i) {
+        live_[i] = true;
+        show(i, screen_[i].title, screen_[i].value);
+    }
+    decorations(true);
+    selected_ = screenSelected_;
+    paint();
 }
 } // namespace openosc::ui

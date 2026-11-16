@@ -5,6 +5,7 @@ namespace {
 using S = FunctionSymbols::Symbol;
 } // namespace
 void MeterCards::create(ParameterBar &bar) {
+    bar_ = &bar;
     for (unsigned i = 0; i < ParameterBar::Count; ++i) {
         rows_[i] = lv_obj_create(bar.card(i));
         lv_obj_remove_style_all(rows_[i]);
@@ -20,7 +21,7 @@ void MeterCards::create(ParameterBar &bar) {
     }
 }
 void MeterCards::visible(bool value) {
-    for (auto *row : rows_) if (row) lv_obj_set_hidden(row, !value);
+    for (auto *row : rows_) if (row) bar_->decorate(row, value);
 }
 unsigned MeterCards::signs(unsigned index, S (&output)[MaximumSigns]) const {
     switch (index) {

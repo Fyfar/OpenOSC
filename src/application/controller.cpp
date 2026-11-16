@@ -141,7 +141,7 @@ namespace openosc {
             }
             if (uiReady_) { view_.service(now); render(); }
         } else {
-            if (InputService::take(input)) onKeys(input.events,now);
+            if (InputService::take(input)) { onKeys(input.events,now); refreshSoftKeys(); } // Captions follow at once.
             store(now);
             if (uiReady_) {
                 const uint32_t start = DWT->CYCCNT;

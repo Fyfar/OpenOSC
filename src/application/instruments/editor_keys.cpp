@@ -64,7 +64,7 @@ void ApplicationController::triggerSource(uint32_t now) {
 }
 void ApplicationController::frequencyKeys(uint32_t keys, uint32_t now) {
     frequencyPanelKeys(keys, now);
-    showGeneratorKeys(); // Unit on F2, Cancel on F4; closed: the screen's own cards.
+    refreshSoftKeys(); // Unit on F2, Cancel on F4; closed: the screen's own cards.
 }
 void ApplicationController::frequencyPanelKeys(uint32_t keys, uint32_t now) {
     if (!keys) return;

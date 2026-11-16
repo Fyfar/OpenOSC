@@ -23,6 +23,7 @@ public:
 private:
     static void draw(lv_event_t *event);
     lv_obj_t *rows_[ParameterBar::Count]{};
+    ParameterBar *bar_ = nullptr; // Shows and hides the rows (under a context: at its release).
     FunctionSymbols::Symbol active_ = FunctionSymbols::Symbol::Unknown;
     bool currentInput_ = false;
     uint32_t highlight_ = 0, muted_ = 0;

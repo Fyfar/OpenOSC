@@ -1,10 +1,12 @@
 #include "openosc/ui/application_view.hpp"
 
 namespace openosc {
+// Every menu sits under the keys' cards (y 22, their captions: ui::SoftKeys), the same frame for the
+// instruments' panels, Settings and the image list; `instrument` only picks the accent.
 void ApplicationView::menuFrame(const char *title, bool instrument, bool retained) {
-    host_.overlay(instrument);
-    lv_obj_set_pos(menu_, 8, instrument ? 62 : 22);
-    lv_obj_set_size(menu_, 304, instrument ? 170 : 210);
+    host_.overlay(true);
+    lv_obj_set_pos(menu_, 8, MenuTop);
+    lv_obj_set_size(menu_, 304, MenuHeight);
     lv_obj_set_style_bg_color(menu_, lv_color_hex(shown().panel), 0);
     lv_obj_set_hidden(menu_, false);
     lv_obj_set_style_border_width(menu_,1,0);
