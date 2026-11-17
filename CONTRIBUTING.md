@@ -12,7 +12,7 @@ This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). By taking part, 
 | Ask a question or get help with installation | [Discussions](https://github.com/bve/OpenOSC/discussions) |
 | Report a bug | [New issue → Bug report](https://github.com/bve/OpenOSC/issues/new/choose) |
 | Suggest a feature | [New issue → Feature request](https://github.com/bve/OpenOSC/issues/new/choose) |
-| Report a security problem | [Security policy](SECURITY.md), not a public issue |
+| Report a security problem | Privately, as described in the [Security policy](SECURITY.md) |
 
 Before opening an issue, search the existing issues and discussions.
 

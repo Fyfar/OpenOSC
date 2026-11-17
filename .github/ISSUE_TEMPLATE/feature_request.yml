@@ -6,7 +6,7 @@ body:
     id: problem
     attributes:
       label: What do you want to do?
-      description: Describe the task or measurement, not only the solution.
+      description: Describe the task or measurement you want to solve.
     validations:
       required: true
   - type: textarea

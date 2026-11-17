@@ -164,9 +164,8 @@ Captured on a ZT703S running OpenOSC.
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter colors can be customized as well
 - BMP screenshots with a built-in viewer
-- Settings and the color theme are stored as JSON files on the external SPI Flash, not in the
-  microcontroller's internal Flash. This avoids wearing out the internal Flash, which holds
-  the firmware. You can edit the files from a computer, and a corrupted file is renamed and
+- Settings and the color theme are stored as JSON files on the external SPI Flash. The
+  microcontroller's internal Flash holds only the firmware, so frequent saves do not wear it. You can edit the files from a computer, and a corrupted file is renamed and
   replaced with defaults.
 - Hold-to-power-off with a progress bar
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
@@ -206,7 +205,7 @@ Recovery is packed as a regular factory update container (`.ZTK`):
 - ZT706S: `OpenOSC-Recovery-ZT706S.ZTK`
 
 The file name can be changed, but it must keep the upper-case `.ZTK` extension.
-The bootloader reads the target model from the file header, not from the name.
+The bootloader reads the target model from the file header.
 
 Install it the same way as an official firmware update:
 
