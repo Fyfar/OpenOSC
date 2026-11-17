@@ -215,10 +215,17 @@ Install it the same way as an official firmware update:
 4. The device restarts into OpenOSC Recovery; restart it manually if it does not.
    The stock application has been replaced, so Recovery opens its menu.
 
-### Recommended: back up the factory block
+### Optional: back up the factory block
 
-Before installing the firmware, save a copy of the factory block. OpenOSC never writes to it,
-but a backup is your only copy if the device is ever damaged.
+**This step is optional.** You can skip it and go straight to step 2.
+
+OpenOSC never writes to the factory block. The only Flash write code in OpenOSC accepts addresses
+from `0x08040000` upward, the firmware area, so neither Recovery nor the firmware can erase or
+change the factory block, even by mistake. Installing, updating and running OpenOSC leave it
+exactly as it was.
+
+The backup is a precaution for rare events outside OpenOSC, such as a hardware fault. If you want
+one:
 
 1. In Recovery, select **BACKUP FACTORY BOOT**, then **CONFIRM** and press **MENU**.
 2. Recovery copies the whole factory block (`0x08000000`–`0x0801FFFF`, 128 KiB) to the USB drive
@@ -229,7 +236,7 @@ but a backup is your only copy if the device is ever damaged.
 
 The block contains the factory bootloader and **this unit's own calibration and settings**.
 Keep a separate backup for each device and never write one device's backup to another.
-OpenOSC has no tool to restore the backup. Writing it back requires an SWD programmer.
+Writing a backup back requires an SWD programmer.
 
 ### Step 2: install the OpenOSC firmware (through Recovery)
 
@@ -267,7 +274,7 @@ The calibration and the factory settings are stored in the factory block, which 
 writes, so the stock firmware uses them as before. OpenOSC's own files in the `/openosc/` folder
 on the storage drive are not needed by the stock firmware and can be deleted.
 
-The [factory block backup](#recommended-back-up-the-factory-block) is not needed for this. It is a
+The [factory block backup](#optional-back-up-the-factory-block) is not needed for this. It is a
 safety copy for the unlikely case that the block itself is ever damaged.
 
 ## Building

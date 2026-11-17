@@ -33,8 +33,8 @@ calibration and is not needed for bug reports.
 ## Testing on ZT706S
 
 The ZT706S build has not been run on hardware yet. If you own a ZT706S and are prepared to take the
-risk, test reports are especially valuable. Back up the factory block first (see the
-[README](README.md#recommended-back-up-the-factory-block)) and open an issue with your results,
+risk, test reports are especially valuable. You can back up the factory block first (optional, see the
+[README](README.md#optional-back-up-the-factory-block)) and open an issue with your results,
 even if everything works.
 
 ## Building
