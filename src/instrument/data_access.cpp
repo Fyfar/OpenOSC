@@ -40,8 +40,8 @@ bool DataAccess::initialize(MeasurementMode view, FactoryRecordPolicy factoryRec
     return select(view == MeasurementMode::Generator ? MeasurementMode::Oscilloscope : view);
 }
 unsigned DataAccess::calibrationArchived() const {
-    return (zeroFile_.repaired() ? ZeroJson : 0) | (pwmFile_.repaired() ? PwmJson : 0) |
-           (gainFile_.repaired() ? GainJson : 0) | (interleaveFile_.repaired() ? InterleaveJson : 0);
+    return (zeroFile_.repaired() ? unsigned(ZeroJson) : 0u) | (pwmFile_.repaired() ? unsigned(PwmJson) : 0u) |
+           (gainFile_.repaired() ? unsigned(GainJson) : 0u) | (interleaveFile_.repaired() ? unsigned(InterleaveJson) : 0u);
 }
 bool DataAccess::select(MeasurementMode view) {
     revokeBackground(); // Revoked first: nothing waits for a background reader.
