@@ -208,10 +208,10 @@ The bootloader reads the target model from the file header. On most units the fi
 changed, as long as it keeps the upper-case `.ZTK` extension.
 
 > [!IMPORTANT]
-> **ZT703S with factory Boot v1.0.15:** this boot version installs only files named
-> `ZOYI-703S-FW-V<number>.ZTK` and silently skips any other name: the file disappears from the drive
-> and nothing is installed. Rename the Recovery file, for example to `ZOYI-703S-FW-V143.ZTK`, and copy
-> it again ([#16](https://github.com/bve/OpenOSC/issues/16)). Boot v1.0.16 accepts any name.
+> **If Recovery does not install** (the file disappears from the drive, but the stock application
+> still starts), rename the file to `ZOYI-703S-FW-V143.ZTK` and copy it again. Some ZT703S units
+> (Boot v1.0.15) install only files with this kind of name
+> ([#16](https://github.com/bve/OpenOSC/issues/16)).
 >
 > If a large `.ZTK` does not fit on the drive ("not enough free space"), free up the device's storage
 > or format it from the stock application: **Scope → MENU → Apps → Image Viewer → F1 → Format (F3)**.
