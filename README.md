@@ -6,6 +6,9 @@ Open-source firmware for the **ZT703S** and **ZT706S** handheld oscilloscope mul
 OpenOSC replaces the stock application with its own oscilloscope, multimeter and signal generator
 firmware. It also adds a small Recovery bootloader that updates the firmware from a USB drive.
 
+**Documentation:** the [wiki](https://github.com/bve/OpenOSC/wiki) has a user guide for every
+instrument, the SCPI reference, troubleshooting and pages for contributors.
+
 > **Status:** work in progress. ZT703S is the main development and test device.
 > **ZT706S:** I don't have one. Users run it, but many features are untested on that model.
 
@@ -192,6 +195,8 @@ modifies it. OpenOSC is installed on top of it in two parts:
 
 Installation takes two steps. First, the Recovery bootloader is installed through the device's
 standard firmware update mechanism. Then Recovery installs the OpenOSC firmware.
+The same steps, with more detail, are in the wiki: [Installation](https://github.com/bve/OpenOSC/wiki/Installation)
+and [Updating](https://github.com/bve/OpenOSC/wiki/Updating).
 
 ### Step 1: install the Recovery bootloader (standard update)
 
@@ -307,6 +312,12 @@ Bug reports, ZT706S test results and pull requests are welcome. See [CONTRIBUTIN
 and the [Code of Conduct](CODE_OF_CONDUCT.md). Questions go to
 [Discussions](https://github.com/bve/OpenOSC/discussions); security problems are reported as described
 in [SECURITY.md](SECURITY.md).
+
+For the code base, see the contributor pages in the wiki:
+[Building](https://github.com/bve/OpenOSC/wiki/Building),
+[Architecture Overview](https://github.com/bve/OpenOSC/wiki/Architecture-Overview),
+[Source Layout](https://github.com/bve/OpenOSC/wiki/Source-Layout) and
+[Memory and Flash Layout](https://github.com/bve/OpenOSC/wiki/Memory-and-Flash-Layout).
 
 ## License
 
