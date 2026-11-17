@@ -7,7 +7,7 @@ OpenOSC replaces the stock application with its own oscilloscope, multimeter and
 firmware. It also adds a small Recovery bootloader that updates the firmware from a USB drive.
 
 > **Status:** work in progress. ZT703S is the main development and test device.
-> **ZT706S builds but has not been run on hardware yet.**
+> **ZT706S:** I don't have one. Users run it, but many features are untested on that model.
 
 > [!WARNING]
 > **This firmware is for enthusiasts only.** If you are generally happy with the stock firmware,
@@ -36,12 +36,36 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Multimeter with statistics</td>
   </tr>
   <tr>
+    <td><img src=".github/images/decoder-split.png" width="320" alt="Protocol decoder, split view: SPI waveform above, decoded table below"></td>
+    <td><img src=".github/images/decoder-can.png" width="320" alt="Protocol decoder: CAN frames table with IDs, data and status"></td>
+  </tr>
+  <tr>
+    <td align="center">Protocol decoder: split view (SPI)</td>
+    <td align="center">Protocol decoder: CAN table</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/decoder-i2c.png" width="320" alt="Protocol decoder: I2C transactions table with addresses and data"></td>
+    <td><img src=".github/images/decoder-canfd-detail.png" width="320" alt="Protocol decoder: detail of a CAN FD frame with its 64-byte payload"></td>
+  </tr>
+  <tr>
+    <td align="center">Protocol decoder: I²C table</td>
+    <td align="center">CAN FD frame detail</td>
+  </tr>
+  <tr>
     <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: dial with REL reference and statistics"></td>
     <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency, waveform preview and soft-keys at the bottom"></td>
   </tr>
   <tr>
     <td align="center">Multimeter, analog view</td>
     <td align="center">Signal generator</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/multimeter-hold-modes.png" width="320" alt="Multimeter HOLD settings: Manual, Delayed, Stable and Auto modes"></td>
+    <td><img src=".github/images/multimeter-auto-hold.png" width="320" alt="Multimeter in Auto HOLD: a stable reading held automatically"></td>
+  </tr>
+  <tr>
+    <td align="center">Multimeter HOLD modes</td>
+    <td align="center">Auto HOLD</td>
   </tr>
   <tr>
     <td><img src=".github/images/scheme-daylight.png" width="320" alt="Oscilloscope with the Daylight color scheme"></td>
@@ -80,6 +104,8 @@ Captured on a ZT703S running OpenOSC.
 - Configurable on-screen measurements, hardware frequency counter, time and level cursors
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, infinite persistence
 - FFT up to 2048 points with four window functions, dBFS or linear scale
+- Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
+  Waveform with annotations, split or table view, event detail; decoded data saved as CSV
 - Zero offset calibration of both channels, stored as a file and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
   switched instantly without a restart
@@ -88,7 +114,9 @@ Captured on a ZT703S running OpenOSC.
 **Multimeter**
 
 - DC/AC voltage, millivolts, DC/AC current and milliamps, resistance, continuity, diode, capacitance
-- Auto and manual ranges, HOLD and REL
+- Auto and manual ranges (the AUTO/RANGE key works as in the stock firmware) and REL
+- HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
+  for a stable reading) and Auto (holds every new stable reading)
 - Statistics, trend chart and CSV logging
 - Bar graph and analog dial scaled to the meter's range: 25,000 counts on ZT703S, 66,000 on ZT706S
 
@@ -97,7 +125,11 @@ Captured on a ZT703S running OpenOSC.
 - Six waveforms: sine, square, triangle, half sine, positive sine and sawtooth
 - Digit-by-digit frequency entry; duty cycle for square
 - Keeps running in the background while you use the oscilloscope or the multimeter
-- Output is always OFF after a restart
+- Output is OFF after power-on by default, or restores its last state
+  (**Settings → Device → Power → Generator at startup**)
+- Rearrangeable screen (**Settings → Display → Generator layout**)
+- ZT703S: square output as in the stock firmware (DAC below 1 kHz, PWM from 1 kHz) or PWM
+  always; Reference 1 kHz preset
 - ZT706S: its external generator module, up to 10 MHz
 
 **USB and remote control**
@@ -116,6 +148,8 @@ Captured on a ZT703S running OpenOSC.
   and the soft-keys (**Analyze → Layout**); on the multimeter, the order of the reading, the
   statistics/bar/trend, the dial and the soft-keys (**MENU → Layout**). Soft-keys are at the
   bottom by default, in the same order as the physical F1–F4 keys
+- The labels above F1–F4 always show what each key does right now; in menus they stay at the
+  bottom, right above the keys
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter colors can be customized as well
 - BMP screenshots with a built-in viewer
@@ -130,7 +164,8 @@ Captured on a ZT703S running OpenOSC.
 
 - Shows the device storage as a USB drive and installs firmware from `/openosc/UPDATE/`
 - Accepts `.OSC` packages and raw `.bin` images; verifies the board model and CRC before erasing
-- Shows the calibration data and can save a copy of the factory Flash block
+- Shows the factory calibration data and its format (long or compact) and can save a copy of the
+  factory Flash block
 - Checks and repairs the FAT file system, and can format the storage drive
 - Opens automatically if the main firmware is missing or invalid
 
