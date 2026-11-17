@@ -207,9 +207,7 @@ void ApplicationController::applyPreferences() {
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
-    // An AUTO/RANGE stroke whose release or hold would now go elsewhere: its 21, never confirmed.
-    if (data_.dmmRangeOpen() && !meterRangeContext()) data_.closeDmmRange();
-    if (events.press & Keypad::AutoRange) meterRangePress(now); // KEY5's 20 20; only the DMM screen uses a press.
+    meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
     if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
@@ -254,9 +252,6 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     } else if ((events.longPress & Keypad::F2) && state_.mode == MeasurementMode::Oscilloscope &&
                !state_.settingsOpen && panel_ == Panel::None && !autoBusy() && !data_.zeroBusy()) {
         if (centerChannels(now)) view_.notify("Channels centered", now); // F2 hold, as on the factory firmware.
-    } else if ((events.longPress & Keypad::AutoRange) && state_.mode == MeasurementMode::Multimeter &&
-               !state_.settingsOpen && panel_ == Panel::None) {
-        meterRangeHold(now);
     } else if (state_.settingsOpen) settingsKeys(keys, now);
     else panelKeys(keys, now, !(events.repeat & (Keypad::Up|Keypad::Down|Keypad::Left|Keypad::Right)));
 }

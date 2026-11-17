@@ -184,7 +184,7 @@ bool DataAccess::pressDmmRange() {
     meter_.rangeCommand();
     return true;
 }
-bool DataAccess::releaseDmmRange() { return dmm_.releaseRange(Board::milliseconds()); }
+bool DataAccess::releaseDmmRange(bool sendRelease) { return dmm_.releaseRange(sendRelease, Board::milliseconds()); }
 bool DataAccess::holdDmmRange() { return dmm_.holdRange(Board::milliseconds()); }
 void DataAccess::closeDmmRange() { if (dmm_.rangeOpen()) dmm_.close(Board::milliseconds()); }
 bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
@@ -252,7 +252,8 @@ void DataAccess::beginShutdown() {
         request_=*original; scopeHeld_=false; zeroBlocked_=true; zeroMinimumSequence_=sequence_+1;
     }
     stopping_ = true;
-    // A stroke whose 20 went still sends its 21 before the UART stops (serviceDmmClose, bounded).
+    // A stroke owing its 21 (within the factory's window) sends it before the UART stops; a pair on
+    // its way is waited for (serviceDmmClose, bounded); later nothing is owed.
     dmmClosing_ = !dmm_.close(Board::milliseconds());
     dmmCloseDeadline_ = Board::milliseconds() + DmmCloseMs;
     generator_.disable();

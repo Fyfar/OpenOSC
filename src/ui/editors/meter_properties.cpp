@@ -59,8 +59,8 @@ void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     else if (row == Hold) std::snprintf(output, capacity, "%s", dmm::HoldSettings::name(hold_));
     else PropertyList::value(row, output, capacity);
 }
-// The choices are taken at once by the controller (meterChanged), which compares them with the
-// instrument and reports what it could not apply.
+// The choices are taken at once by the controller (meterChanged), one changed row at a time; it
+// reports what it could not apply.
 bool MeterProperties::choose(unsigned row, unsigned index) {
     if (index >= options(row)) return false;
     if (row == Range && !ranged()) return false;

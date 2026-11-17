@@ -116,14 +116,16 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
     bool dmmRanged() const { return dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
-    // The physical AUTO/RANGE key as the factory's KEY5 (dmm::RangeStroke): its qualified press sends
-    // 20 20 and opens the stroke (a NextRange command, refused while busy); the short release ends it
-    // with 21 21, the 2 s hold with 22 22 (the command becomes Auto). Without an open stroke (its press
-    // refused or taken by a wake) release and hold do nothing. A press needs a fresh reading of this DMM
-    // session (MeterCommands::FreshUs). closeDmmRange: the context took the key (a panel, Remote, an input
-    // overflow): the open stroke ends with its 21, its command cancelled, never confirmed.
+    // The physical AUTO/RANGE key as the factory's KEY5 (dmm::RangeStroke, one held state): its
+    // qualified press sends 20 20 and opens the stroke (a NextRange command, refused while busy);
+    // releaseDmmRange(true), let go within the factory's 500 ms window, ends it with 21 21; (false), let go
+    // later, ends it with nothing; each holdDmmRange (2 s, then every 2 s held) sends 22 22, the first
+    // making the command Auto. Without an open stroke (its press refused or taken by a wake) release and
+    // hold do nothing. A press needs a fresh reading of this DMM session (MeterCommands::FreshUs).
+    // closeDmmRange: the context took the key (a panel, Remote, an input overflow): within the window
+    // its 21, later nothing; its command cancelled, never confirmed.
     bool pressDmmRange();
-    bool releaseDmmRange();
+    bool releaseDmmRange(bool sendRelease);
     bool holdDmmRange();
     bool dmmRangeOpen() const { return dmm_.rangeOpen(); }
     void closeDmmRange();

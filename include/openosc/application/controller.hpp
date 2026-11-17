@@ -162,14 +162,15 @@ private:
     void meterKeys(uint32_t keys, uint32_t now);
     void meterRangePress(uint32_t now); // AUTO/RANGE's qualified press on the DMM screen: the stroke's 20.
     bool meterRangeContext() const;     // The DMM screen takes AUTO/RANGE (no panel, menu, Remote).
-    void meterRangeHold(uint32_t now); // AUTO/RANGE held in the DMM.
+    void meterRangeKeys(const KeyEvents &events, uint32_t now); // AUTO/RANGE's press, release, hold in the DMM.
+    void serviceMeterRange(); // Closes the open AUTO/RANGE stroke once the DMM screen no longer has the key.
     void applyBrightness();
     void shutdownNotice(const char *text, uint32_t now);
     void generatorKeys(uint32_t keys, uint32_t now);
     void triggerKeys(uint32_t keys, uint32_t now);
     void frequencyKeys(uint32_t keys, uint32_t now);
     void meterPanelKeys(uint32_t keys, uint32_t now);
-    void meterChanged(uint32_t now); // The DMM panel's choices, taken at once.
+    void meterChanged(unsigned row, uint32_t now); // The DMM panel's changed row, taken at once (that row only).
     ui::MeterProperties meterProperties() const;
     void meterAppearanceKeys(uint32_t keys, uint32_t now);
     // Measurement > Hold: each committed field saved and applied at once (a running cycle ends, none

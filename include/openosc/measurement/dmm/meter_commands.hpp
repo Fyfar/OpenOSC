@@ -25,10 +25,13 @@ public:
     bool selectFunction(Function function, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
     bool requestKey(KeyCommand::Action action, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
     bool setRange(unsigned index, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
-    // The physical AUTO/RANGE (KeyGestures press, release, hold): the qualified press opens a NextRange
-    // stroke (its 20), the short release ends it with 21, the hold with 22 (the command becomes Auto).
+    // The physical AUTO/RANGE (KeyGestures press, release/releaseLate, holdRepeat): the qualified press
+    // opens a NextRange stroke (its 20); the release within the factory's window ends it with 21, a later
+    // one with nothing (the command is then judged from the release); each hold sends a 22 (the first
+    // makes the command Auto). A press while the previous physical stroke's command only awaits its
+    // packet (nothing owed on the wire) supersedes it: that command ends without a status.
     bool pressRange(const Result &latest, uint32_t nowMs, uint64_t nowUs, uint64_t minimumUs);
-    bool releaseRange(uint32_t nowMs) { return stroke_.finish(RangeStroke::End::Release, nowMs); }
+    bool releaseRange(bool sendRelease, uint32_t nowMs) { return stroke_.release(sendRelease, nowMs); }
     bool holdRange(uint32_t nowMs);
     bool rangeOpen() const { return stroke_.open() && !stroke_.closing(); }
     void service(CommandPort &port, const Result &latest, uint32_t nowMs);
@@ -54,5 +57,7 @@ private:
     RangeSelector range_;
     RangeStroke stroke_; // Owned by the Key or Range operation that started it.
     Operation operation_ = Operation::Function;
+    bool physical_ = false; // The Key operation is the physical AUTO/RANGE's.
+    bool ended_ = false;    // The running stroke's end went (EndSent, Released).
 };
 } // namespace openosc::dmm

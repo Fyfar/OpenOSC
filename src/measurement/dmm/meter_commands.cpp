@@ -1,7 +1,7 @@
 #include "openosc/measurement/dmm/meter_commands.hpp"
 
 namespace openosc::dmm {
-static_assert(KeyCommand::StrokeMs >= RangeStroke::OpenLimitMs + 2 * RangeStroke::StepLimitMs &&
+static_assert(KeyCommand::StrokeMs >= RangeStroke::QuietLimitMs + 2 * RangeStroke::StepLimitMs &&
               KeyCommand::StrokeMs >= RangeStroke::HoldGapMs + 3 * RangeStroke::StepLimitMs,
               "a stroke's command outlives the stroke's own bounds");
 bool MeterCommands::selectFunction(Function function, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
@@ -15,7 +15,7 @@ bool MeterCommands::requestKey(KeyCommand::Action action, const Result &latest, 
     const bool range = action == Action::NextRange || action == Action::Auto || action == Action::Manual;
     if (range && !Ranges::selectable(Functions::identify(latest))) return false;
     if (!key_.request(action, latest, nowMs, minimumUs)) return false;
-    operation_ = Operation::Key; return true;
+    operation_ = Operation::Key; physical_ = false; return true;
 }
 bool MeterCommands::setRange(unsigned index, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
     if (selector_.busy() || key_.busy() || stroke_.active() || latest.timestampUs < minimumUs) return false;
@@ -25,13 +25,16 @@ bool MeterCommands::setRange(unsigned index, const Result &latest, uint32_t nowM
 bool MeterCommands::pressRange(const Result &latest, uint32_t nowMs, uint64_t nowUs, uint64_t minimumUs) {
     const bool fresh = latest.sequence && latest.timestampUs >= minimumUs && nowUs >= latest.timestampUs &&
                        nowUs - latest.timestampUs <= FreshUs;
-    if (!fresh || !idle() || !requestKey(KeyCommand::Action::NextRange, latest, nowMs, minimumUs)) return false;
+    if (!fresh || !Ranges::selectable(Functions::identify(latest))) return false;
+    if (operation_ == Operation::Key && physical_ && key_.busy() && !stroke_.active()) key_.cancel(); // Superseded.
+    if (!idle() || !requestKey(KeyCommand::Action::NextRange, latest, nowMs, minimumUs)) return false;
+    physical_ = true; ended_ = false;
     stroke_.start(RangeStroke::End::Open, nowMs); // Its 20 on the next service.
     return true;
 }
 bool MeterCommands::holdRange(uint32_t nowMs) {
-    if (stroke_.closing() || !stroke_.finish(RangeStroke::End::Hold, nowMs)) return false;
-    key_.hold();
+    if (!stroke_.hold(nowMs)) return false;
+    key_.hold(); // The first: NextRange becomes Auto (a later 22 changes nothing).
     return true;
 }
 bool MeterCommands::close(uint32_t nowMs) {
@@ -50,6 +53,7 @@ void MeterCommands::cancelOwner() {
 bool MeterCommands::startStroke(CommandGroup command, uint32_t nowMs) {
     using End = RangeStroke::End;
     if (command != CommandGroup::NextRange && command != CommandGroup::AutoRange) return false;
+    ended_ = false;
     return stroke_.start(command == CommandGroup::AutoRange ? End::Hold : End::Release, nowMs);
 }
 void MeterCommands::service(CommandPort &port, const Result &latest, uint32_t nowMs) {
@@ -77,7 +81,7 @@ void MeterCommands::serviceStroke(CommandPort &port, const Result &latest, uint3
     if (closing || stroke_.closing()) { cancelOwner(); return; }
     const bool key = operation_ == Operation::Key;
     if (event == Event::PressSent && key) key_.pressed(latest, nowMs); // RangeSelector follows packets itself.
-    if (event == Event::EndSent) {
+    if (event == Event::EndSent || event == Event::Released) { // Its effect counts from here.
         if (key) key_.sent(latest.sequence, nowMs);
         else range_.sent(latest.sequence, nowMs);
     }
@@ -85,5 +89,10 @@ void MeterCommands::serviceStroke(CommandPort &port, const Result &latest, uint3
         if (key) key_.fail();
         else range_.fail();
     }
+    // A key held past its end (after a 22): its command is judged meanwhile (poll gives no command
+    // then, only Ok or its deadline), so a long hold neither delays nor times out the confirmation.
+    if (event == Event::EndSent || event == Event::Released) ended_ = true;
+    CommandGroup none;
+    if (key && ended_ && key_.busy()) key_.poll(latest, nowMs, none);
 }
 } // namespace openosc::dmm

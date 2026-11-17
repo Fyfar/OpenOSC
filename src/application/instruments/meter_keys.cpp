@@ -4,12 +4,10 @@
 
 namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
-    // AUTO/RANGE short release: the stroke its press opened ends with 21 21 (703S 080442B8, 706S
-    // 08044C28): AUTO -> Manual, then the next range. No open stroke (refused at the press, a wake):
-    // nothing. A function without ranges (diode, continuity, no reading yet; DataAccess::dmmRanged):
-    // the range keys are ignored, nothing sent, nothing said.
+    // AUTO/RANGE is meterRangeKeys' (its own events, not the generic short press). A function without
+    // ranges (diode, continuity, no reading yet; DataAccess::dmmRanged): the range keys are ignored,
+    // nothing sent, nothing said.
     const bool ranged = data_.dmmRanged();
-    if (ranged && (keys & Keypad::AutoRange)) data_.releaseDmmRange();
     if (ranged && (keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
         !meterCommand(data_.stepDmmRange(keys & Keypad::Up ? 1 : -1)))
         view_.notify("Range command busy", now);
@@ -47,10 +45,26 @@ void ApplicationController::meterRangePress(uint32_t now) {
     if (!meterRangeContext() || !data_.dmmRanged()) return;
     if (!meterCommand(data_.pressDmmRange())) view_.notify("Range command busy", now);
 }
-// AUTO/RANGE hold: the factory's 22 22 after ~2 s (703S 0804423C, 706S 08044BAC) ends the open stroke,
-// AUTO again; no 21 follows. Without an open stroke, or without ranges, nothing.
-void ApplicationController::meterRangeHold(uint32_t) {
-    if (data_.dmmRanged()) data_.holdDmmRange();
+// The physical AUTO/RANGE in the DMM as the factory's KEY5 (KeyGestures' own events, 703S 080459F4 /
+// 706S 08046390): the qualified press its 20; the release within 500 ms its 21 (slot0 080442B8 /
+// 08044C28); a later release nothing (the factory's long flag); each hold, 2 s and every 2 s held, a
+// 22 (slot2 0804423C / 08044BAC). One open stroke at a time; without it (its press refused, a wake took
+// the key) release and hold do nothing.
+void ApplicationController::meterRangeKeys(const KeyEvents &events, uint32_t now) {
+    constexpr uint32_t Key = Keypad::AutoRange;
+    serviceMeterRange();
+    if (events.press & Key) meterRangePress(now);
+    if (!data_.dmmRangeOpen()) return;
+    if (events.holdRepeat & Key) data_.holdDmmRange();
+    if (events.release & Key) data_.releaseDmmRange(true);
+    else if (events.releaseLate & Key) data_.releaseDmmRange(false);
+}
+// When the DMM screen no longer has AUTO/RANGE (a panel or the settings opened, Remote, another
+// screen, no UI) its open stroke is closed at once: within the factory's window its 21, later nothing
+// (DataAccess::closeDmmRange). Every loop pass (serviceInstruments, before the key events) and before
+// each KEY5 event, so no release or hold has to come first.
+void ApplicationController::serviceMeterRange() {
+    if (data_.dmmRangeOpen() && !meterRangeContext()) data_.closeDmmRange();
 }
 // The DMM panel as the instrument and the preferences have it now.
 ui::MeterProperties ApplicationController::meterProperties() const {
@@ -87,7 +101,7 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
         return;
     }
     if (outcome == Outcome::Activate) data_.meter().resetStatistics(); // The one action row.
-    if (outcome == Outcome::Changed) meterChanged(now);
+    if (outcome == Outcome::Changed) meterChanged(navigator_.row(), now);
     view_.properties(meterEditor_, navigator_);
 }
 // Appearance: every committed choice and reset is taken at once and saved; the reading, range,
@@ -117,28 +131,44 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
     }
     view_.properties(appearanceEditor_, navigator_);
 }
-// A choice in the DMM panel, taken at once: whatever differs from the instrument is applied; what
-// is refused is said and the panel shows the instrument as it is.
-void ApplicationController::meterChanged(uint32_t now) {
+// A choice in the DMM panel, taken at once: only the row that was changed. A look (Display, colours,
+// digits, Statistics) sets its preference and sends nothing: the panel's snapshot of Range, REL, log
+// and serial (from when it opened, or a HOLD's reading) is never compared with the instrument then.
+// Range, REL, log and serial apply that one choice; what is refused is said and the panel shows the
+// instrument as it is.
+void ApplicationController::meterChanged(unsigned row, uint32_t now) {
+    using Row = ui::MeterProperties::Row;
     const auto &meter=data_.meter();
     const auto refused = [&](const char *why) { view_.notify(why, now); meterEditor_ = meterProperties(); };
-    if (meterEditor_.automatic() != (meter.latest().range==dmm::RangeMode::Auto) && !meterCommand(data_.setDmmAuto(meterEditor_.automatic())))
-        return refused("Range command busy");
-    if (meterEditor_.relative() != (meter.relative().active() || meter.latest().peerRelative) && !data_.relativeMeter(meterEditor_.relative()))
-        return refused("REL needs a valid current reading");
-    auto &logger=data_.meterLogger();
-    if (meterEditor_.logging() != logger.active()) {
+    switch (row) {
+    case Row::Range: // Already so: nothing (not even the hold mode's window restarts).
+        if (meterEditor_.automatic() != (meter.latest().range == dmm::RangeMode::Auto) &&
+            !meterCommand(data_.setDmmAuto(meterEditor_.automatic())))
+            return refused("Range command busy");
+        return;
+    case Row::Relative: // A REL command restarts the statistics: only when it changes REL.
+        if (meterEditor_.relative() != (meter.relative().active() || meter.latest().peerRelative) &&
+            !data_.relativeMeter(meterEditor_.relative()))
+            return refused("REL needs a valid current reading");
+        return;
+    case Row::Logging: {
+        auto &logger=data_.meterLogger();
+        if (meterEditor_.logging() == logger.active()) return;
         if (logger.active()) logger.finish();
         else if (!logger.begin(1024*1024)) return refused("Cannot start CSV logging");
+        return;
     }
-    if (meterEditor_.serial() != data_.meterSerial().enabled()) {
+    case Row::SerialOutput:
+        if (meterEditor_.serial() == data_.meterSerial().enabled()) return;
         if (!data_.serialMeter(meterEditor_.serial())) return refused("Serial output busy; turn GEN off");
         serialWatched_=data_.meterSerial().enabled();
+        return;
+    case Row::Display: prefs_.meter.display=meterEditor_.display(); break;
+    case Row::Statistics: prefs_.meter.statistics=meterEditor_.statistics(); break;
+    case Row::Digits: prefs_.meter.face=meterEditor_.face(); break;
+    case Row::Colors: prefs_.meter.palette=meterEditor_.palette(); break;
+    default: return;
     }
-    prefs_.meter.display=meterEditor_.display();
-    prefs_.meter.statistics=meterEditor_.statistics();
-    prefs_.meter.face=meterEditor_.face();
-    prefs_.meter.palette=meterEditor_.palette();
     changed(now); dataRefresh_=true;
 }
 } // namespace openosc

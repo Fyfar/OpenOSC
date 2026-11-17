@@ -25,6 +25,7 @@ void KeyCommand::pressed(const Result &latest, uint32_t now) {
     function_ = Functions::identify(latest);
     originManual_ = latest.range == RangeMode::Manual;
     originIndexed_ = originManual_ && Ranges::current(latest, &index_);
+    pressSequence_ = latest.sequence;
     pressed_ = true;
 }
 bool KeyCommand::request(Action action, const Result &latest, uint32_t now, uint64_t minimumTimestampUs) {
@@ -42,7 +43,11 @@ bool KeyCommand::poll(const Result &latest, uint32_t now, CommandGroup &command)
     }
     const bool current = latest.timestampUs >= minimumTimestampUs_;
     if (sent_ && current && latest.sequence != seen_) { seen_ = latest.sequence; seenAt_ = now; }
-    const bool fresh = sent_ && current && latest.sequence != sequence_;
+    // A range press (Manual, NextRange) counts any packet newer than its 20: the controller can show
+    // Manual between the 20 and the end (a physical key held long, or released past its window). Auto
+    // (a 22) counts only packets after the end, as do HOLD release and REL off.
+    const uint32_t after = rangePress() && pressed_ ? pressSequence_ : sequence_;
+    const bool fresh = sent_ && current && latest.sequence != after;
     if ((fresh && int32_t(now - earliest_) >= 0 && confirms(latest)) ||
         (current && !sent_ && action_ != Action::NextRange && latest.sequence && matches(latest))) {
         status_ = DataStatus::Ok; return false;

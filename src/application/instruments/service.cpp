@@ -3,6 +3,7 @@
 
 namespace openosc {
 void ApplicationController::serviceInstruments(uint32_t now) {
+    serviceMeterRange();        // A panel, the settings or Remote took AUTO/RANGE: its stroke closed now.
     followGeneratorOutput(now); // Startup output: a user's ON/OFF once confirmed.
     const auto selection = data_.dmmCommandStatus();
     const bool visible = uiReady_;

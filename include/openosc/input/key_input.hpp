@@ -23,7 +23,7 @@ public:
         uint32_t held=0;
         const bool holding=gestures_.holding(Keypad::Relative,now,held);
         holdMs_.store(held,std::memory_order_relaxed); holding_.store(holding,std::memory_order_release);
-        if (!(events.press|events.shortPress|events.longPress|events.repeat)) return;
+        if (!events.any()) return;
         const uint32_t written=written_.load(std::memory_order_relaxed);
         if (uint32_t(written-read_.load(std::memory_order_acquire))==Capacity) {
             dropped_.fetch_add(1,std::memory_order_relaxed); return;
