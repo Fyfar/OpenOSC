@@ -204,8 +204,17 @@ Recovery is packed as a regular factory update container (`.ZTK`):
 - ZT703S: `OpenOSC-Recovery-ZT703S.ZTK`
 - ZT706S: `OpenOSC-Recovery-ZT706S.ZTK`
 
-The file name can be changed, but it must keep the upper-case `.ZTK` extension.
-The bootloader reads the target model from the file header.
+The bootloader reads the target model from the file header. On most units the file name can be
+changed, as long as it keeps the upper-case `.ZTK` extension.
+
+> [!IMPORTANT]
+> **ZT703S with factory Boot v1.0.15:** this boot version installs only files named
+> `ZOYI-703S-FW-V<number>.ZTK` and silently skips any other name: the file disappears from the drive
+> and nothing is installed. Rename the Recovery file, for example to `ZOYI-703S-FW-V143.ZTK`, and copy
+> it again ([#16](https://github.com/bve/OpenOSC/issues/16)). Boot v1.0.16 accepts any name.
+>
+> If a large `.ZTK` does not fit on the drive ("not enough free space"), free up the device's storage
+> or format it from the stock application: **Scope → MENU → Apps → Image Viewer → F1 → Format (F3)**.
 
 Install it the same way as an official firmware update:
 
