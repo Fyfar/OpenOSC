@@ -7,7 +7,7 @@
 
 namespace openosc::ui {
 PropertyKind MeterProperties::kind(unsigned row) const {
-    if (row == Range && !ranged()) return PropertyKind::Info; // Diode, continuity: nothing to choose.
+    if (row == Range && !ranged()) return PropertyKind::Info; // Diode, continuity, capacitance: nothing to choose.
     switch (row) {
     case Range: case Display: case Colors: case Digits: return PropertyKind::Choice;
     case ResetStatistics: return PropertyKind::Action;

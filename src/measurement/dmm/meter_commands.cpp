@@ -19,7 +19,7 @@ bool MeterCommands::requestKey(KeyCommand::Action action, const Result &latest, 
 }
 bool MeterCommands::setRange(unsigned index, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
     if (selector_.busy() || key_.busy() || stroke_.active() || latest.timestampUs < minimumUs) return false;
-    if (!range_.request(index, latest, nowMs)) return false;
+    if (!Ranges::selectable(Functions::identify(latest)) || !range_.request(index, latest, nowMs)) return false;
     operation_ = Operation::Range; return true;
 }
 bool MeterCommands::pressRange(const Result &latest, uint32_t nowMs, uint64_t nowUs, uint64_t minimumUs) {

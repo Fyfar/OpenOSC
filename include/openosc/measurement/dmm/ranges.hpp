@@ -15,9 +15,11 @@ public:
     static const RangeInfo *list(Function function, board::DmmCounts counts, unsigned &count);
     static const RangeInfo *current(const Result &result, unsigned *index = nullptr);
     static bool choose(Function function, double maximumSi, unsigned &index);
-    // The AUTO/RANGE keys apply: the function has a range table (Functions::ranged). Diode, continuity
-    // and an unknown function (no reading yet) have none: every range command is refused there.
-    static bool selectable(Function function) { return Functions::ranged(function); }
+    // The AUTO/RANGE keys apply: the function has a range table (Functions::ranged) the keys step through.
+    // Diode, continuity and an unknown function (no reading yet) have none; capacitance has a table (for
+    // the scale and the reading's range) but the chip ranges it by itself and the factory firmware
+    // ignores the key there (ZT703S, stock 1.6.27). Every range command is refused in these.
+    static bool selectable(Function function) { return Functions::ranged(function) && function != Function::Capacitance; }
 };
 // A manual range reached with RANGE (20 20) presses, one at a time: each press waits until a fresh
 // packet shows its effect. The first press from Auto waits up to ManualMs for Manual (Decoder::range;

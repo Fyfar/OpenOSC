@@ -5,7 +5,7 @@
 namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     // AUTO/RANGE is meterRangeKeys' (its own events, not the generic short press). A function without
-    // ranges (diode, continuity, no reading yet; DataAccess::dmmRanged): the range keys are ignored,
+    // ranges (diode, continuity, capacitance, no reading yet; DataAccess::dmmRanged): the range keys are ignored,
     // nothing sent, nothing said.
     const bool ranged = data_.dmmRanged();
     if (ranged && (keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
