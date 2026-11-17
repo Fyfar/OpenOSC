@@ -58,9 +58,7 @@ void MeterSummary::arrange() {
         lv_obj_set_style_text_align(secondary_, LV_TEXT_ALIGN_RIGHT, 0);
         for (unsigned c = 0; c < Columns; ++c) centre(c); // Placed again as the values change.
     } else {
-        place(reference_, 0, 0, 150, 16);
-        place(secondary_, 154, 0, 80, 16);
-        place(range_, 238, 0, Width - 238, 16);
+        flowMeta();
         lv_obj_set_style_text_align(range_, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_style_text_align(secondary_, LV_TEXT_ALIGN_LEFT, 0);
         place(separator_, 0, 24, Width, 1);
@@ -72,9 +70,19 @@ void MeterSummary::arrange() {
     }
     lv_obj_set_hidden(separator_, compact_ || !statisticsRows_);
 }
-// The meta row at the texts' own widths: a long REL reference moves the range mode right instead of
-// running into it, and the secondary reading (AC frequency) is right-aligned in what is left.
+// The meta row at the texts' own widths, so no state is clipped by a box sized for another (UNKNOWN
+// is wider than MANUAL). Compact: a long REL reference moves the range mode right instead of running
+// into it, and the secondary reading (AC frequency) is right-aligned in what is left. Digital: the
+// range mode ends at the right edge, the secondary reading takes the room left of it.
 void MeterSummary::flowMeta() {
+    if (!compact_) {
+        const int mode = textWidth(range_), modeX = Width - mode;
+        const auto place = [](lv_obj_t *object, int x, int width) { lv_obj_set_pos(object, x, 0); lv_obj_set_size(object, std::max(1, width), MetaHeight); };
+        place(reference_, 0, ReferenceWidth);
+        place(secondary_, SecondaryX, std::min(SecondaryWidth, modeX - MetaGap - SecondaryX));
+        place(range_, modeX, mode);
+        return;
+    }
     const auto place = [&](lv_obj_t *object, int x, int width) { lv_obj_set_pos(object, x, metaY_); lv_obj_set_size(object, std::max(1, width), CompactRow); };
     const int reference = textWidth(reference_), mode = CompactMetaX + reference + CompactMetaGap;
     place(reference_, CompactMetaX, reference);
@@ -131,7 +139,8 @@ void MeterSummary::palette(const MeterLook &look) {
     font(reference_, look.text(MeterRole::Range, CompactFont));
     font(secondary_, look.text(MeterRole::Secondary, CompactFont));
     font(range_, look.text(MeterRole::Mode, CompactFont));
-    if (compact_) { flowMeta(); for (unsigned c = 0; c < Columns; ++c) centre(c); }
+    flowMeta(); // The texts' widths follow their fonts.
+    if (compact_) for (unsigned c = 0; c < Columns; ++c) centre(c);
     const auto line = lv_color_hex(look.palette.line);
     if (!lv_color_eq(lv_obj_get_style_bg_color(separator_, LV_PART_MAIN), line)) lv_obj_set_style_bg_color(separator_, line, 0);
     bar_.palette(look.palette);
@@ -155,7 +164,7 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
     } else lv_label_set_text(reference_, "Range unavailable");
     lv_label_set_text(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
                               : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
-    if (compact_) flowMeta();
+    flowMeta();
     if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
     lv_obj_set_style_text_color(range_, lv_color_hex(accent), 0);
     // Statistics shown (On, not Trend): the names stay, and an empty period (after a reset, an

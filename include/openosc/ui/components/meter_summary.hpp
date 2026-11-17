@@ -14,6 +14,9 @@ class MeterSummary {
 public:
     static constexpr int Width = 296, Columns = 3, ColumnGap = 4, ColumnWidth = (Width - (Columns - 1) * ColumnGap) / Columns;
     static constexpr int NameY = 28, ValueY = 41, ValueHeight = 16;
+    // Digital meta row: the reference, the secondary reading (at most SecondaryWidth, MetaGap clear
+    // of the range mode), the range mode at its text's width against the right edge.
+    static constexpr int MetaHeight = 16, ReferenceWidth = 150, SecondaryX = 154, SecondaryWidth = 80, MetaGap = 4;
     static constexpr unsigned ValueFont = 14;
     static constexpr int columnX(unsigned column) { return int(column) * (ColumnWidth + ColumnGap); }
     void create(lv_obj_t *parent);
@@ -50,7 +53,7 @@ public:
 private:
     void arrange();
     void centre(unsigned column);
-    void flowMeta(); // Compact: the meta row's three texts side by side at their widths.
+    void flowMeta(); // The meta row's three texts at their widths (digital and compact).
     // A statistic at the last valid reading's resolution, else at the display's digits.
     void statisticText(double value, Quantity quantity, char *output, size_t capacity) const;
     static int textWidth(lv_obj_t *label); // Its text in its own font (the role's typeface).
