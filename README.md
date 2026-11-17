@@ -52,6 +52,14 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">CAN FD frame detail</td>
   </tr>
   <tr>
+    <td><img src=".github/images/decoder-uart.png" width="320" alt="Protocol decoder: UART frames table at 100 kbaud"></td>
+    <td><img src=".github/images/decoder-uart-autobaud.png" width="320" alt="Decoder settings: UART baud rate detected automatically"></td>
+  </tr>
+  <tr>
+    <td align="center">Protocol decoder: UART table</td>
+    <td align="center">UART baud rate detection</td>
+  </tr>
+  <tr>
     <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: dial with REL reference and statistics"></td>
     <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency, waveform preview and soft-keys at the bottom"></td>
   </tr>
