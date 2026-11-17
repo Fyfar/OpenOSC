@@ -47,10 +47,10 @@ bool KeyCommand::poll(const Result &latest, uint32_t now, CommandGroup &command)
         (current && !sent_ && action_ != Action::NextRange && latest.sequence && matches(latest))) {
         status_ = DataStatus::Ok; return false;
     }
-    // Entering Manual refused: a packet first seen ManualMs after the send still shows this function
-    // without MANU. An old packet followed by silence is not that (Timeout below).
+    // Entering Manual refused: a packet first seen ManualMs after the send still shows this function in
+    // AUTO. An old packet followed by silence, or packets without a range state, are not that (Timeout).
     if (fresh && rangePress() && !originManual_ && Functions::identify(latest) == function_ &&
-        seenAt_ - sentAt_ >= RangeSelector::ManualMs) { status_ = DataStatus::Unsupported; return false; }
+        latest.range == RangeMode::Auto && seenAt_ - sentAt_ >= RangeSelector::ManualMs) { status_ = DataStatus::Unsupported; return false; }
     if (int32_t(now - deadline_) >= 0) { status_ = DataStatus::Timeout; return false; }
     if (!current || !latest.sequence || sent_) return false;
     command = action_ == Action::Auto ? CommandGroup::AutoRange : action_ == Action::ReleaseHold ? CommandGroup::PeerHold :

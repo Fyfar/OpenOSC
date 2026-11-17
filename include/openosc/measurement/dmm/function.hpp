@@ -9,6 +9,22 @@ public:
     static Function identify(const Result &result);
     static CommandGroup group(Function function);
     static Function next(CommandGroup group, Function current);
+    // The function has ranges the AUTO/RANGE key steps through (a Ranges table on both models): V, mV,
+    // A, mA (DC and AC), resistance, capacitance. Diode, continuity, Unknown and any value past it
+    // have none.
+    static constexpr bool ranged(Function f) {
+        return f < Function::Unknown && f != Function::Continuity && f != Function::Diode;
+    }
+    // The quantity a ranged function's reading is in (its unit's type, any prefix): Unknown for the others.
+    static constexpr Quantity quantity(Function f) {
+        switch (f) {
+        case Function::VoltageDc: case Function::VoltageAc: case Function::MillivoltsDc: case Function::MillivoltsAc: return Quantity::Voltage;
+        case Function::CurrentDc: case Function::CurrentAc: case Function::MilliampsDc: case Function::MilliampsAc: return Quantity::Current;
+        case Function::Resistance: return Quantity::Resistance;
+        case Function::Capacitance: return Quantity::Capacitance;
+        default: return Quantity::Unknown;
+        }
+    }
 };
 class FunctionSelector {
 public:

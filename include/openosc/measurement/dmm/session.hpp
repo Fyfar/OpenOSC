@@ -51,6 +51,26 @@ private:
     double samples_[Capacity]{};
     size_t cursor_ = 0, size_ = 0;
 };
+// The factory's resistance settling after an overload (dmm_update_display 703S 0803C514 / 706S
+// 0803CDB0, flag 0x20001026 / 0x20001056, counter 0x20001027 / 0x20001057): an overload in an Ohm unit
+// arms it, and the next Skipped readings in an Ohm unit without it are not shown, so the digits
+// stay on OL while the input settles. Unlike the factory's: an overload re-arms it in full (there a
+// counter already running continues), and the Session clears it on a function change or selection
+// (the factory's flag outlives them) and does not advance it under HOLD (there no packet is decoded).
+class OverloadSettle {
+public:
+    static constexpr unsigned Skipped = 2;
+    bool skip(const Result &result) { // True: this reading is not shown.
+        if (result.primary.quantity != Quantity::Resistance) return false;
+        if (result.primary.status == DataStatus::Overload) { left_ = Skipped; return false; }
+        if (!left_) return false;
+        --left_;
+        return true;
+    }
+    void clear() { left_ = 0; }
+private:
+    unsigned left_ = 0;
+};
 class Session {
 public:
     bool accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs);
@@ -58,14 +78,17 @@ public:
     bool held() const { return userHold_ || latest_.packetHold; }
     bool userHeld() const { return userHold_; }
     DataStatus status(uint64_t nowUs, uint64_t staleAfterUs) const;
+    // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
+    // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
     const Result &latest() const { return latest_; }
     // What the screen, the needle and SCPI show: the manual HOLD's reading, else the Delayed/Stable/
-    // Auto snapshot, else the latest. held() stays the manual and the DMM's own HOLD only: the
-    // statistics, the trend and the log go on under a mode's snapshot (docs/DMM_AUTO_HOLD.md).
+    // Auto snapshot, else the last reading shown (the latest but for settling ones). held() stays the
+    // manual and the DMM's own HOLD only: the statistics, the trend and the log go on under a mode's
+    // snapshot (docs/DMM_AUTO_HOLD.md).
     const Result &displayed() const {
         if (frozen_) return held_;
         const Result *snapshot = detector_.captured();
-        return snapshot ? *snapshot : latest_;
+        return snapshot ? *snapshot : shown_;
     }
     // The hold mode's cycle (HoldDetector): configure (cancels it), arm, cancel, service.
     void configureHold(const HoldSettings &settings) { detector_.configure(settings); }
@@ -86,7 +109,7 @@ public:
     // and the statistics stay as they were. Under the manual or the DMM's own HOLD, as before, the held
     // reading; REL already on needs no new reference (the statistics restart, as always).
     bool relative(bool enabled) {
-        if (enabled && !relative_.active() && !frozen_ && detector_.active() && !latest_.primary.valid()) return false;
+        if (enabled && !relative_.active() && !frozen_ && detector_.active() && !shown_.primary.valid()) return false;
         detector_.cancel();
         if (enabled != relative_.active()) {
             if (enabled) { if (!relative_.capture(displayed())) return false; }
@@ -107,7 +130,8 @@ public:
     static bool placeholder(const Result &result) { return !std::strncmp(result.mainText, "--.", 3); }
 
 private:
-    Result latest_, held_;
+    Result latest_, shown_, held_;
+    OverloadSettle settle_;
     HoldDetector detector_;
     Statistics stats_;
     History history_;

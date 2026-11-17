@@ -101,9 +101,8 @@ void HoldDetector::observe(const Result &result, const Context &context) {
     Signature signature;
     int64_t counts = 0;
     double quantum = 0;
-    const bool valid = result.primary.valid() && !Session::placeholder(result) &&
-                       sample(result, context.relative, signature, counts, quantum);
-    // Overload, "--.", an unparsed reading: no window; in Auto also a departure.
+    const bool valid = result.primary.valid() && sample(result, context.relative, signature, counts, quantum);
+    // Overload, no reading ("--.", blanks, dashes), an unparsed reading: no window; in Auto also a departure.
     if (!valid) {
         size_ = 0;
         if (phase_ == Phase::Held && settings_.mode == HoldMode::Auto) phase_ = Phase::Waiting;

@@ -1,4 +1,5 @@
 #include "openosc/ui/components/meter_bar.hpp"
+#include "openosc/ui/format/meter.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -44,7 +45,7 @@ void MeterBar::palette(const MeterPalette &palette) {
     off_ = palette.line; overload_ = palette.alert; muted_ = palette.muted;
     Elements::textColor(sign_, muted_);
     for (auto *tick : ticks_) Elements::textColor(tick, muted_);
-    Elements::textColor(state_, overload_);
+    Elements::textColor(state_, MeterText::alert(status_) ? overload_ : muted_);
     if (repaint) { initialized_ = false; lv_obj_invalidate(bar_); } // The OL colour is in color_.
 }
 void MeterBar::top(int y) {
@@ -94,9 +95,10 @@ void MeterBar::update(const dmm::Result &result, DataStatus health, uint32_t acc
     const bool repaint = !initialized_ || lit != lit_ || color_ != color;
     if (!initialized_ || negative != negative_) lv_label_set_text(sign_, negative ? "-" : "");
     const bool statusChanged = !initialized_ || status_ != value.status;
-    if (statusChanged)
-        lv_label_set_text(state_, value.status == DataStatus::Ok ? "" : over ? "OL" :
-            value.status == DataStatus::Stale ? "STALE" : value.status == DataStatus::NoData ? "NO DATA" : "INVALID");
+    if (statusChanged) {
+        lv_label_set_text(state_, MeterText::caption(value.status));
+        Elements::textColor(state_, MeterText::alert(value.status) ? overload_ : muted_);
+    }
     initialized_ = true; lit_ = lit; negative_ = negative; status_ = value.status; color_ = color;
     if (statusChanged) showTicks();
     if (repaint) lv_obj_invalidate(bar_);

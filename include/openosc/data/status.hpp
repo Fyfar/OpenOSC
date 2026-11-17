@@ -16,7 +16,10 @@ enum class DataStatus : uint8_t {
     Overflow,
     HardwareError,
     Uncalibrated,
-    NoSpace // A file would not fit the free space; nothing was written.
+    NoSpace, // A file would not fit the free space; nothing was written.
+    // A well-formed reading without a number: the DMM's own blanks, dashes or "--." (no measurement
+    // yet, a range or function in transition). Not an error and never a value.
+    NoReading
 };
 struct Rational {
     uint32_t numerator = 0, denominator = 1;

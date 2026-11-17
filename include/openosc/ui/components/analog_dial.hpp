@@ -45,6 +45,9 @@ public:
     bool service(uint32_t now); // True if a redraw was requested.
     const NeedleMotion &motion() const { return motion_; }
     State state() const { return state_; }
+    // The caption at the bottom left (OL, NO VALUE, STALE..., else HOLD) and whether it is in the alert colour.
+    const char *caption() const { return *caption_ ? caption_ : held_ ? "HOLD" : ""; }
+    bool captionAlert() const { return alert_ || held_; }
     bool negative() const { return negative_; }
     // The needle's angle (degrees clockwise from vertical) at a scale fraction.
     static float angle(float fraction) { return (fraction * 2 - 1) * HalfAngle; }
@@ -59,6 +62,8 @@ private:
     NeedleMotion motion_;
     MeterLook look_{};
     State state_ = State::NoData;
+    const char *caption_ = "NO DATA"; // MeterText::caption and ::alert of the reading's status.
+    bool alert_ = false;
     bool negative_ = false, held_ = false;
     float drawn_ = 0;     // The position last painted.
     unsigned decimals_ = 256; // Nothing labelled yet.

@@ -18,7 +18,10 @@ bool RecordCodec::encode(const Result &r, uint8_t *output, size_t capacity) {
     if (!output || capacity < Bytes || unsigned(r.kind) > 7 || unsigned(r.range) > 2)
         return false;
     uint8_t bytes[Bytes]{};
-    if (!copy(r.mainText, sizeof r.mainText, reinterpret_cast<char *>(bytes + 0x11), 16) ||
+    if (!std::memchr(r.mainText, 0, sizeof r.mainText) || !std::memchr(r.rawUnit, 0, sizeof r.rawUnit))
+        return false; // recordText reads both as strings.
+    const char *text = Decoder::recordText(r);
+    if (!copy(text, sizeof r.mainText, reinterpret_cast<char *>(bytes + 0x11), 16) ||
         !copy(r.rawUnit, sizeof r.rawUnit, reinterpret_cast<char *>(bytes + 0x39), 16) ||
         !copy(r.secondaryText, sizeof r.secondaryText, reinterpret_cast<char *>(bytes + 0x49), 16))
         return false;
@@ -28,7 +31,7 @@ bool RecordCodec::encode(const Result &r, uint8_t *output, size_t capacity) {
                                                                                        : "");
     if (r.trueRms)
         std::memcpy(bytes + 0x29, "TRUE RMS", 9);
-    bytes[0x59] = r.mainText[0] == '-';
+    bytes[0x59] = text[0] == '-';
     bytes[0x5a] = r.currentInput;
     Binary::writeLe(bytes + 0x60, r.rawMagnitude, 4);
     bytes[0x65] = bytes[0x66] = r.packetHold;
@@ -56,9 +59,6 @@ bool RecordCodec::decode(const uint8_t *in, size_t bytes, Result &output) {
     result.decimals = in[0xad] <= 4 ? in[0xad] : 255;
     result.currentInput = in[0x5a];
     result.trueRms = !std::strcmp(rms, "TRUE RMS");
-    result.range = !std::strcmp(range, "AUTO")   ? RangeMode::Auto
-                   : !std::strcmp(range, "MANU") ? RangeMode::Manual
-                                                 : RangeMode::Unknown;
     result.rawMagnitude = Binary::readLe(in + 0x60, 4);
     std::strcpy(result.unit, result.rawUnit);
     if (!std::strcmp(result.unit, "&"))
@@ -67,13 +67,10 @@ bool RecordCodec::decode(const uint8_t *in, size_t bytes, Result &output) {
         std::strcpy(result.unit, "kOhm");
     if (!std::strcmp(result.unit, "M&"))
         std::strcpy(result.unit, "MOhm");
-    NumericValue unitType;
-    if (UnitParser::parse("0", result.rawUnit, unitType))
-        result.primary.quantity = unitType.quantity;
-    if (std::strchr(result.mainText, 'L'))
-        result.primary.status = DataStatus::Overload;
-    else if (!UnitParser::parse(result.mainText, result.rawUnit, result.primary))
-        result.primary.status = DataStatus::Unsupported;
+    Decoder::classify(result.mainText, result.rawUnit, Decoder::digits(result.mainText), result.primary);
+    // +21 "AUTO"/"MANU" (+AF the MANU bit): the packet's rule, so a manual range without either bit
+    // reads back as the packet that produced it.
+    result.range = Decoder::range(!std::strcmp(range, "AUTO"), !std::strcmp(range, "MANU") || in[0xaf], result);
     if (result.trueRms) {
         char number[sizeof result.secondaryText];
         std::strcpy(number, result.secondaryText);

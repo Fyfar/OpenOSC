@@ -179,16 +179,20 @@ void MeterScreen::fastBar(const dmm::Result &result, DataStatus status, const dm
 void MeterScreen::status(const dmm::Result &result, bool held, DataStatus status, bool relative, const char *mode) {
     const bool armed = mode && *mode; // A hold mode's cycle: its word, never "LIVE" for a held reading.
     const char *word = armed ? mode : "HOLD";
+    // The link's state (NO DATA, STALE) first, else the shown reading's own (MeterText::caption):
+    // the DMM's "no number yet" (NoReading) is neutral, only an overload or an unreadable reading alerts.
+    const bool link = status == DataStatus::Stale || status == DataStatus::NoData;
+    const auto reading = MeterText::state(result);
     const char *state = held ? (status == DataStatus::Stale ? "STALE" : "")
-                        : status == DataStatus::Stale ? "STALE"
-                        : status == DataStatus::NoData ? "NO DATA"
+                        : link ? MeterText::caption(status)
                         : armed ? ""
-                        : result.primary.status == DataStatus::Overload ? "OVERLOAD"
-                        : result.primary.valid() ? "LIVE" : "INVALID";
-    const auto tone = held || (!armed && result.primary.status == DataStatus::Overload) ? StatusTone::Alert
-                      : status == DataStatus::Stale || status == DataStatus::NoData ? StatusTone::Warning
-                      : armed ? StatusTone::Neutral // Waiting over live readings.
-                      : result.primary.valid() ? StatusTone::Good : StatusTone::Alert;
+                        : reading == DataStatus::Overload ? "OVERLOAD"
+                        : reading == DataStatus::Ok ? "LIVE" : MeterText::caption(reading);
+    const bool alert = reading == DataStatus::Overload || (!link && MeterText::alert(reading));
+    const auto tone = held || (!armed && alert) ? StatusTone::Alert
+                      : link ? StatusTone::Warning
+                      : armed || reading == DataStatus::NoReading ? StatusTone::Neutral // Waiting over live readings.
+                      : StatusTone::Good;
     const bool prefix = held || armed;
     char text[48];
     std::snprintf(text, sizeof text, "%s%s%s%s", prefix ? word : "", prefix && *state ? " / " : "", state,
@@ -220,8 +224,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     const double reference = relative ? context.relative->reference().si : 0;
     const auto *statistics = context.statistics;
     char text[128];
-    std::snprintf(text, sizeof text, "%s", result.primary.status == DataStatus::Overload ? "OL"
-                                           : result.primary.valid() ? result.mainText : "----.--");
+    std::snprintf(text, sizeof text, "%s", MeterText::reading(result));
     elements.text(ElementId::Unit, MeterText::unit(result.unit));
     const bool mean = context.display == 1 && statistics && statistics->count() &&
                       statistics->quantity() == result.primary.quantity;

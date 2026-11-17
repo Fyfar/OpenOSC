@@ -27,7 +27,7 @@ size_t DiagnosticFormat::format(const Result &result,char *output,size_t capacit
     if (!std::strcmp(unit,"&") || !std::strcmp(unit,"Ohm")) unit="OM";
     else if (!std::strcmp(unit,"K&") || !std::strcmp(unit,"kOhm")) unit="KOM";
     else if (!std::strcmp(unit,"M&") || !std::strcmp(unit,"MOhm")) unit="MOM";
-    const int bytes=std::snprintf(output,capacity,"%s:%s %s",kind,result.mainText,unit);
+    const int bytes=std::snprintf(output,capacity,"%s:%s %s",kind,Decoder::recordText(result),unit); // "?" for a non-value that reads as one.
     if (bytes<0 || size_t(bytes)>=capacity) { output[0]=0; return 0; }
     return size_t(bytes);
 }

@@ -1,5 +1,6 @@
 #include "openosc/ui/components/analog_dial.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/ui/format/meter.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -50,8 +51,10 @@ void AnalogDial::reading(const dmm::BarReading &value, bool held) {
     if (state == State::Live || state == State::Overload)
         motion_.target(state == State::Overload ? NeedleMotion::High : value.fraction());
     else if (state == State::NoData) motion_.target(0); // Stale keeps the last position.
-    if (state != state_ || negative != negative_ || held != held_) {
-        state_ = state; negative_ = negative; held_ = held;
+    const char *caption = MeterText::caption(value.status);
+    const bool alert = MeterText::alert(value.status);
+    if (state != state_ || negative != negative_ || held != held_ || caption != caption_ || alert != alert_) {
+        state_ = state; negative_ = negative; held_ = held; caption_ = caption; alert_ = alert;
         if (shown()) lv_obj_invalidate(object_); // Colours and captions change.
     }
 }
@@ -195,8 +198,7 @@ void AnalogDial::paint(lv_layer_t *layer) const {
         lv_draw_label(layer, &mark, &box);
     }
     // Bottom left, in reading order: the polarity, then the state (OL, HOLD...) after it.
-    const char *caption = state_ == State::Overload ? "OL" : state_ == State::NoData ? "NO DATA"
-                          : state_ == State::Stale ? "STALE" : held_ ? "HOLD" : "";
+    const char *caption = this->caption();
     lv_draw_label_dsc_t text;
     lv_draw_label_dsc_init(&text);
     const int signLeft = area.x1 + SignX;
@@ -206,7 +208,7 @@ void AnalogDial::paint(lv_layer_t *layer) const {
         lv_draw_label(layer, &text, &sign);
     }
     text.font = Elements::font(14);
-    text.color = lv_color_hex(state_ == State::Overload || held_ ? look_.palette.alert : look_.palette.muted);
+    text.color = lv_color_hex(captionAlert() ? look_.palette.alert : look_.palette.muted);
     text.text = caption; text.text_local = 1;
     const int captionLeft = negative_ ? signLeft + SignWidth + 2 : signLeft;
     const lv_area_t left = {captionLeft, area.y2 - 17, captionLeft + 80, area.y2};

@@ -1,5 +1,7 @@
+#include "openosc/measurement/dmm/function.hpp"
 #include "openosc/measurement/dmm/packet.hpp"
 #include "openosc/measurement/dmm/result.hpp"
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -11,7 +13,50 @@ char Decoder::character(uint8_t segment) {
     for (unsigned i = 0; i < sizeof patterns; ++i)
         if (segment == patterns[i])
             return chars[i];
-    return '?';
+    return '-';
+}
+Decoder::Digits Decoder::positions(const char *characters) {
+    bool digit = false, dash = false, other = false;
+    for (; *characters; ++characters) {
+        if (*characters >= '0' && *characters <= '9') digit = true;
+        else if (*characters == '-') dash = true;
+        else if (*characters != '.' && *characters != ' ') other = true;
+    }
+    return other || (digit && dash) ? Digits::Other : digit ? Digits::Number : Digits::Blank;
+}
+Decoder::Digits Decoder::digits(const char *text) {
+    // The sign: a leading '-' before a digit, or before a point and a digit ("-.1234": the sign bit
+    // over a blank top position). "--." and "-.-" have none.
+    const char *rest = text + 1;
+    const bool sign = *text == '-' && (std::isdigit(uint8_t(*rest)) || (*rest == '.' && std::isdigit(uint8_t(rest[1]))));
+    return positions(sign ? rest : text);
+}
+const char *Decoder::recordText(const Result &result) {
+    if (result.primary.valid()) return result.mainText;
+    NumericValue again;
+    classify(result.mainText, result.rawUnit, digits(result.mainText), again);
+    return again.valid() ? "?" : result.mainText;
+}
+void Decoder::classify(const char *text, const char *rawUnit, Digits digits, NumericValue &primary) {
+    primary = {};
+    NumericValue unitType;
+    if (UnitParser::parse("0", rawUnit, unitType))
+        primary.quantity = unitType.quantity;
+    if (std::strchr(text, 'L')) primary.status = DataStatus::Overload;
+    else if (digits == Digits::Blank) primary.status = DataStatus::NoReading;
+    else if (digits == Digits::Other || !UnitParser::parse(text, rawUnit, primary)) // Writes only on success.
+        primary.status = DataStatus::Unsupported;
+}
+RangeMode Decoder::range(bool autoBit, bool manualBit, const Result &result) {
+    if (autoBit) return RangeMode::Auto;
+    if (manualBit) return RangeMode::Manual;
+    const auto status = result.primary.status;
+    // The range mode is metadata apart from the number: a value, OL or the DMM's "no number yet"
+    // (NoReading, which can last seconds on a large C) of a known function and unit; never Unsupported.
+    const bool reading = status == DataStatus::Ok || status == DataStatus::Overload || status == DataStatus::NoReading;
+    const auto function = Functions::identify(result);
+    return reading && Functions::ranged(function) && result.primary.quantity == Functions::quantity(function) ? RangeMode::Manual
+                                                                                                             : RangeMode::Unknown;
 }
 bool Decoder::number(const uint8_t *p, unsigned first, unsigned count, char *text, size_t capacity) {
     size_t written = 0;
@@ -76,23 +121,18 @@ bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
                                                                      : "";
         std::snprintf(candidate.unit, sizeof candidate.unit, "%sOhm", prefix);
     }
-    bool rawDigits = true;
+    // The five digit positions as segments (bit 4, the point or the sign, masked): the factory's
+    // record+60 magnitude from their digits, and what they hold for classify (a dash there is a
+    // segment, never the sign).
+    char characters[6]{};
     for (unsigned i = 0; i < 5; ++i) {
-        const char c = character(p[4 - i] & 0xef);
+        const char c = characters[i] = character(p[4 - i] & 0xef);
         if (c >= '0' && c <= '9')
             candidate.rawMagnitude = candidate.rawMagnitude * 10 + unsigned(c - '0');
-        else if (c != ' ')
-            rawDigits = false;
     }
-    const bool overload = std::strchr(candidate.mainText, 'L');
-    NumericValue unitType;
-    if (UnitParser::parse("0", candidate.rawUnit, unitType))
-        candidate.primary.quantity = unitType.quantity;
-    if (overload) {
+    classify(candidate.mainText, candidate.rawUnit, positions(characters), candidate.primary);
+    if (candidate.primary.status == DataStatus::Overload)
         candidate.rawMagnitude = 66000;
-        candidate.primary.status = DataStatus::Overload;
-    } else if (!rawDigits || !UnitParser::parse(candidate.mainText, candidate.rawUnit, candidate.primary))
-        candidate.primary.status = DataStatus::Unsupported;
     if (candidate.trueRms) {
         char numberText[16];
         if (!number(p, 8, 4, numberText, sizeof numberText))
@@ -102,16 +142,7 @@ bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
         if (!UnitParser::parse(numberText, unit, candidate.secondary))
             candidate.secondary.status = DataStatus::Unsupported;
     }
-    // Range: AUTO payload[10].2 first, then MANU .3, else Unknown, as the factory (zt_fw multimeter.md,
-    // record +21). One compatibility difference: this controller's manual V/A/Ohm ranges come with
-    // neither bit (packets captured after RANGE, functionality.cpp; HIL VDC 1-4, RES 1-5), so those
-    // three quantities without a bit stay Manual. Not capacitance (no captured manual Cap packet),
-    // diode or continuity: there no bit means Unknown (no range keys, mirror or restore).
-    const auto quantity = candidate.primary.quantity;
-    const bool ranged = (quantity == Quantity::Voltage || quantity == Quantity::Current || quantity == Quantity::Resistance) &&
-                        candidate.kind != Kind::Diode && candidate.kind != Kind::DiodeWithBeeper &&
-                        candidate.kind != Kind::Continuity && candidate.kind != Kind::Capacitance;
-    candidate.range = p[10] & 4 ? RangeMode::Auto : (p[10] & 8) || ranged ? RangeMode::Manual : RangeMode::Unknown;
+    candidate.range = range(p[10] & 4, p[10] & 8, candidate);
     output = candidate;
     return true;
 }

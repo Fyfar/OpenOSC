@@ -110,8 +110,13 @@ bool RangeSelector::request(unsigned index, const Result &latest, uint32_t now) 
 }
 bool RangeSelector::poll(const Result &latest, uint32_t now, CommandGroup &command) {
     if (!busy()) return false;
-    if (Functions::identify(latest) != function_ || latest.peerRelative) { status_ = DataStatus::InvalidArgument; return false; }
+    // Another known function or REL ends it; a transitional unknown one (expected while the range
+    // changes) is waited out within the deadline, never pressed on.
+    const auto function = Functions::identify(latest);
+    if ((function != Function::Unknown && function != function_) || latest.peerRelative) { status_ = DataStatus::InvalidArgument; return false; }
     if (int32_t(now - deadline_) >= 0) { status_ = DataStatus::Timeout; return false; }
+    if (latest.sequence != seen_) { seen_ = latest.sequence; seenAt_ = now; }
+    if (function == Function::Unknown) return false;
     const bool fresh = !waiting_ || (latest.sequence != sequence_ && int32_t(now - (sentAt_ + SettleMs)) >= 0);
     unsigned actual = 0;
     const bool manual = latest.range == RangeMode::Manual && Ranges::current(latest, &actual);
@@ -120,7 +125,14 @@ bool RangeSelector::poll(const Result &latest, uint32_t now, CommandGroup &comma
         const uint32_t since = now - sentAt_;
         if (!manual_) { // The first press from Auto: MANU may come late; never a second press before it.
             if (fresh && manual) { manual_ = true; index_ = actual; }
-            else { if (since >= ManualMs) status_ = DataStatus::Unsupported; return false; }
+            else {
+                // Still AUTO in a live packet, one first seen ManualMs after the press: the controller
+                // has no manual range here. An early packet then silence, or packets without a range
+                // state (no number), say nothing: the deadline decides (Timeout).
+                if (since >= ManualMs && fresh && latest.range == RangeMode::Auto && seenAt_ - sentAt_ >= ManualMs)
+                    status_ = DataStatus::Unsupported;
+                return false;
+            }
         } else if (!fresh || !manual || actual == index_) { // A step not yet shown (or Manual left).
             if (since >= StepMs) status_ = DataStatus::Timeout;
             return false;

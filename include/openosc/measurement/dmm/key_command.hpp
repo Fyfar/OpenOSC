@@ -8,8 +8,9 @@ namespace openosc::dmm {
 // accepted (pressed) and from its end (sent: 21 or 22), confirmed only in that function: Auto by AUTO;
 // Manual or NextRange from Auto by Manual; from Manual, a newly recognised range index of the same
 // function (as RangeSelector's steps). A transitional unknown function or another function never
-// confirms. Entering Manual that live packets of the same function (one first observed
-// RangeSelector::ManualMs after the end) still show without MANU: Unsupported. Anything else
+// confirms. Manual is the decoder's (Decoder::range: MANU, or a reading without AUTO in a ranged
+// function). Entering Manual that live packets of the same function (one first observed
+// RangeSelector::ManualMs after the end) still show in AUTO: Unsupported. Anything else
 // unconfirmed, a silent controller included: Timeout, DeadlineMs after the end (or the request, if the
 // stroke never started). One key, never a second. HOLD release and REL off: one command, sent().
 class KeyCommand {

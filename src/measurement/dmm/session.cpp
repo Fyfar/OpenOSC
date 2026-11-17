@@ -20,6 +20,7 @@ bool History::value(size_t index, double &output) const {
 }
 void Session::restart(Function function, uint64_t untilUs) {
     resetStatistics();
+    settle_.clear();
     detector_.reselect(); // The old function's snapshot and window go with the selection.
     awaited_ = function;
     awaitUntilUs_ = untilUs;
@@ -39,6 +40,11 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     const bool known = function != Function::Unknown;
     const bool functionChanged = known && function_ != ~0U && (unsigned(function) != function_ || candidate.currentInput != functionCurrent_);
     const bool settles = (known && function == awaited_) || timestampUs >= awaitUntilUs_;
+    // After an overload in Ohm, two readings are not shown: nothing below sees them (display, hold
+    // mode, statistics, trend). Under HOLD the settling waits, as the factory decodes nothing then.
+    if (functionChanged) settle_.clear();
+    if (!userHold_ && !candidate.packetHold && settle_.skip(candidate)) return true;
+    shown_ = candidate;
     detector_.observe(candidate, {relative_.active() && !functionChanged, candidate.packetHold, awaiting_ && !settles});
     if (held()) {
         if (!frozen_) {
@@ -58,7 +64,8 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     contextPeerRelative_ = candidate.peerRelative; contextKnown_ = true;
     // After a selection, the first reading of the selected function (or the selector's deadline) seeds.
     if (awaiting_ && settles) awaiting_ = false;
-    // "--." (no reading) and overload restart the running statistics; the trend only skips them.
+    // "--." (the factory's placeholder) and overload restart the running statistics; the trend only
+    // skips them. Other readings without a number (NoReading, Unsupported) neither count nor reset.
     if (placeholder(candidate) || candidate.primary.status == DataStatus::Overload) { stats_.reset(); return true; }
     if (awaiting_ || !candidate.primary.valid()) return true; // Unparsed or non-finite: neither counted nor a reset.
     if (trendQuantity_ != candidate.primary.quantity) { history_.reset(); trendQuantity_ = candidate.primary.quantity; }
@@ -67,12 +74,12 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     return true;
 }
 bool Session::hold(bool enabled) {
-    if (enabled && !latest_.primary.valid())
+    if (enabled && !shown_.primary.valid())
         return false;
     if (enabled) detector_.cancel(); // One HOLD at a time: the manual one ends a mode's cycle.
     userHold_ = enabled;
     if (enabled && !frozen_) {
-        held_ = latest_;
+        held_ = shown_;
         frozen_ = true;
     }
     if (!held())
