@@ -52,7 +52,7 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">CAN FD frame detail</td>
   </tr>
   <tr>
-    <td><img src=".github/images/decoder-uart.png" width="320" alt="Protocol decoder: UART frames table at 100 kbaud"></td>
+    <td><img src=".github/images/decoder-uart.png" width="320" alt="Protocol decoder: UART frames table"></td>
     <td><img src=".github/images/decoder-uart-autobaud.png" width="320" alt="Decoder settings: UART baud rate detected automatically"></td>
   </tr>
   <tr>
