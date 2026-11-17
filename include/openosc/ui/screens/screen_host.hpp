@@ -8,6 +8,8 @@
 #include "openosc/ui/components/function_icon.hpp"
 #include "openosc/ui/components/meter_cards.hpp"
 #include "openosc/ui/components/status_bar_layout.hpp"
+#include "openosc/ui/components/decode_table.hpp"
+#include "openosc/ui/components/decode_strip.hpp"
 #include "openosc/ui/screens/screen_layout.hpp"
 #include "openosc/ui/components/scope_styles.hpp"
 #include "openosc/ui/waveform.hpp"
@@ -46,6 +48,7 @@ public:
     Elements &elements() { return elements_; }
     ParameterBar &parameters() { return parameters_; }
     WaveformWidget &waveform() { return waveform_; }
+    const WaveformWidget &waveform() const { return waveform_; }
     GeneratorPreview &preview() { return preview_; }
     MeterSummary &meterSummary() { return meterSummary_; }
     ScopeFooter &scopeFooter() { return scopeFooter_; }
@@ -56,6 +59,18 @@ public:
     AnalogDial &dial() { return dial_; }
     lv_obj_t *meterPanel() const { return meterPanel_; } // The DMM body's background, behind every element.
     bool overlayActive() const { return overlay_; }
+    // The protocol decoder's view on the Scope (plan §4.1, §4.2): Split and Decoder only take the
+    // decoder's own layout for as long as they show (scopeOrder_ is never changed: it returns as it
+    // was), Wave + annotations the user's order with the strip over the plot's bottom rows. Applied
+    // at once when the Scope shows; the same state changes nothing.
+    void decoder(bool shown, decoding::View view);
+    bool decoderShown() const { return decoderShown_; }
+    // Whether the trace is drawn: no menu over the Scope, and not Decoder only (plan §4.4).
+    bool traceDrawn() const { return !overlay_ && !(decoderShown_ && decoderView_ == decoding::View::Table); }
+    DecodeTable &decodeTable() { return decodeTable_; }
+    DecodeStrip &decodeStrip() { return decodeStrip_; }
+    const DecodeTable &decodeTable() const { return decodeTable_; }
+    const DecodeStrip &decodeStrip() const { return decodeStrip_; }
 
 private:
     void placeStatus();
@@ -64,7 +79,8 @@ private:
     void paintScope(); // The Scope's colours from theme(): waveform, footer, chrome.
     lv_obj_t *root_ = nullptr, *chrome_ = nullptr, *meterPanel_ = nullptr;
     int statusX_ = StatusBarLayout::StatusX, statusWidth_ = 0, statusRight_ = 0;
-    bool overlay_ = false;
+    bool overlay_ = false, decoderShown_ = false;
+    decoding::View decoderView_ = decoding::View::Table;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;
     ScopeArrangement scopeOrder_;
     BlockSpan scopeSpans_[ScopeArrangement::Size];
@@ -82,5 +98,7 @@ private:
     FunctionIcon functionIcon_;
     MeterCards meterCards_;
     AnalogDial dial_;
+    DecodeTable decodeTable_;
+    DecodeStrip decodeStrip_;
 };
 } // namespace openosc::ui

@@ -89,6 +89,12 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
         if (!held) queuePlotSave(now);
     }
 }
+bool ApplicationController::holdKeys(uint32_t keys, uint32_t now) {
+    if (!(keys & Keypad::HoldSave)) return false;
+    if (!data_.scopeHeld()) data_.holdScope(true);
+    else if (!data_.runScope() && uiReady_) view_.notify("Cannot run: the record is in use", now);
+    return true;
+}
 void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     followShownChannel(); // Before any key acts on the selection.
     if (keys & Keypad::AutoRange) {
@@ -129,8 +135,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         else openAnalyze(0);
         return;
     }
-    if ((keys & Keypad::HoldSave) && !data_.scopeHeld()) data_.holdScope(true);
-    else if ((keys & Keypad::HoldSave) && !data_.runScope() && uiReady_) view_.notify("Cannot run: the record is in use", now);
+    holdKeys(keys, now);
     if (keys & Keypad::Relative) view_.scopeFooterPage(); // REL has no other Scope use; its hold is power.
     // A second F1/F2 press changes the channel only to one that is shown (followShownChannel).
     if (keys & Keypad::F1) {

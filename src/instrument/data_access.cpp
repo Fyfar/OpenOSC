@@ -44,7 +44,7 @@ unsigned DataAccess::calibrationArchived() const {
            (gainFile_.repaired() ? GainJson : 0) | (interleaveFile_.repaired() ? InterleaveJson : 0);
 }
 bool DataAccess::select(MeasurementMode view) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) return false;
     if (!initialized_ || stopping_ || unsigned(view) >= InstrumentModeCount)
         return false;
@@ -168,8 +168,10 @@ bool DataAccess::acquireScopeWait(scope::FrameLease &lease,uint32_t timeoutMs) {
     return true;
 }
 bool DataAccess::sendDmmGroup(dmm::CommandGroup group) {
-    if (unsigned(group) >= 5) return false;
-    return selectDmmFunction(dmm::Functions::next(group, dmm::Functions::identify(meter_.latest())));
+    if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter ||
+        !dmm_.pressGroup(group, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+    meter_.reselect(); // No function is awaited: the packets show which one the key gave.
+    return true;
 }
 bool DataAccess::selectDmmFunction(dmm::Function function) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter ||
@@ -232,7 +234,7 @@ bool DataAccess::stepDmmRange(int direction) {
     return setDmmRange(index);
 }
 bool DataAccess::recordScope(ScopeRecorder::Format format) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) return false;
     if (format != ScopeRecorder::Format::Raw && format != ScopeRecorder::Format::Csv)
         return false;
@@ -245,7 +247,7 @@ bool DataAccess::recordScope(ScopeRecorder::Format format) {
     return true;
 }
 void DataAccess::beginShutdown() {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (stopping_)
         return;
     if (const auto *original=zeroOperation_.abandon()) {

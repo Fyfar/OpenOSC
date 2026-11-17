@@ -14,6 +14,9 @@ struct Layout {
     static constexpr const char *Screenshots = "/openosc/SCREENSHOTS";
     static constexpr const char *Captures = "/openosc/CAPTURES";
     static constexpr const char *Logs = "/openosc/LOGS";
+    // Decoded events (CSV, docs/SCOPE_PROTOCOL_DECODERS_CSV.md): created by the application when it first
+    // saves one (DecodeCsvFile), not by prepare(): Recovery and the formatter never need it.
+    static constexpr const char *Decode = "/openosc/DECODE";
     // Parents before children: the order prepare() creates them in.
     static constexpr const char *Directories[] = {Root, Update, Backup, Settings, Ui, Calibration, Screenshots, Captures, Logs};
     // Empty directories the factory startup creates in the root after every reset. Not OpenOSC data:

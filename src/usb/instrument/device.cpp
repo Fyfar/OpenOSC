@@ -78,7 +78,7 @@ void InstrumentUsb::poll(uint32_t now) {
     if (usbResets != busResets_) { busResets_ = usbResets; busActivityAt_ = now; attach_.window().reset(now); }
     if (polling_) return;
     Polling guard(polling_);
-    if (connected()) attach_.window().configured(); // A healthy host: the capture runs again at once.
+    if (connected()) attach_.configured(); // A healthy host: the capture runs again at once, no stale reconnect.
     if (reattach_.due(now)) start(); // start() services the attach itself (and abandons a failed one).
     else attach_.service(now);       // The window is a deadline: this pass's earlier `now` never ends it.
     if (!active_) return;

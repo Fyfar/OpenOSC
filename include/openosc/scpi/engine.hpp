@@ -31,6 +31,8 @@ private:
     bool meterCommand(const Command &command);
     bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
+    bool decodeCommand(const Command &command); // DECode: (decode.cpp).
+    void endDecode();                           // The CSV export lets go (reset, abort, done).
     void dispatch(const Command &command);
     void reply(const char *format, ...);
     void number(double value);
@@ -60,6 +62,10 @@ private:
     uint32_t generatorDeadline_ = 0;
     uint32_t readingSequence_ = 0, deadline_ = 0, now_ = 0, inputAt_ = 0, frameAt_ = 0, outputAt_ = 0;
     bool inputPending_ = false;
+    // DECode:DATA?: only the export's ticket and the block's progress (the stream itself is the
+    // decoder's, in its workspace): measured first (waitingDecode_), then sent as a definite block.
+    uint32_t decodeTicket_ = 0, decodeTotal_ = 0, decodeSent_ = 0;
+    bool decodeBinary_ = false, waitingDecode_ = false;
     uint8_t ese_ = 0, sre_ = 0;
 };
 } // namespace openosc::scpi

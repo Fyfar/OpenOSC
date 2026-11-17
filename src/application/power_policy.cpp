@@ -11,7 +11,8 @@ void ApplicationController::applyBrightness() {
 bool ApplicationController::servicePower(uint32_t keys,uint32_t now) {
     battery_.poll(now);
     if (uiReady_) { view_.batteryDisplay(prefs_.batteryDisplay); view_.battery(battery_.state()); }
-    const bool wake=keys && dimmed_;
+    // The idle level the key was pressed under, before its activity restores the working brightness.
+    const bool wake=keys && prefs_.idle.wakeTakesKey(dimmed_,prefs_.brightness);
     if (keys) idle_.activity(now);
     if (shutdown_!=Shutdown::None) return wake;
     const auto low=lowBattery_.poll(battery_.state(),now);

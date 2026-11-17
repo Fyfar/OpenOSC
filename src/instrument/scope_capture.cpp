@@ -24,7 +24,7 @@ bool DataAccess::validateScope(const ScopeRequest &r) const {
     return r.frontend.enabled[0] || r.frontend.enabled[1];
 }
 bool DataAccess::configureScope(const ScopeRequest &r) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) return false;
     return configureScopeCore(r);
 }
@@ -391,7 +391,7 @@ bool DataAccess::runScope() {
     return true;
 }
 void DataAccess::holdScope(bool hold) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) { zeroOperation_.holdAfter(hold,Board::milliseconds()); return; }
     holdScopeCore(hold);
 }

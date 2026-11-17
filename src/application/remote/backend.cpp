@@ -2,6 +2,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/clocks.hpp"
+#include <cstdio>
 
 namespace openosc {
 InstrumentBackend::InstrumentBackend(ApplicationController &application)
@@ -25,6 +26,9 @@ void InstrumentBackend::demand() const { application_.data_.frameHosts().demand(
 bool InstrumentBackend::run(bool single) {
     if (application_.data_.zeroBusy()) return false;
     application_.data_.frameHosts().rearm(host_, application_.data_.scopeFrameSequence(), Board::milliseconds());
+    // The decoded record kept for hosts is of before the new arm (and a share skips acquireScope's Single
+    // stale guard): it goes; the new arm's records are shared again once decoded.
+    application_.decoder_.dropHostRecord();
     auto &a = application_; if (!a.cancelAuto(Board::milliseconds())) return false;
     if (single) {
         auto r = scopeRequest(); r.trigger.mode = scope::TriggerMode::Single;
@@ -48,10 +52,31 @@ bool InstrumentBackend::forceTrigger() {
     return a.data_.forceScope();
 }
 uint32_t InstrumentBackend::frameSequence() const {
-    const auto &d = application_.data_;
+    const auto &a = application_;
+    const auto &d = a.data_;
     if (d.measurementMode() != MeasurementMode::Oscilloscope || d.zeroBusy()) return 0;
     demand(); // ACQ:FRAME?: the host polls for the record it will read.
-    return d.scopeFrameSequence();
+    if (!decodedRecords()) return d.scopeFrameSequence();
+    // The decoder on (plan §5.3): the record record() serves: the decoded one kept for hosts, else the
+    // newest only when it is the decoded one; 0 while none is (the host polls again).
+    if (const auto *shared = a.decoder_.hostRecord()) return shared->metadata().sequence;
+    const auto *published = a.decoder_.results().published();
+    return published && published->key().sequence == d.scopeFrameSequence() ? published->key().sequence : 0;
+}
+// In RUN with the decoder on, a host reads only decoded records (UI and USB on the same record, all
+// three views); in HOLD the held record and its result share their key: as before. Off: as before.
+bool InstrumentBackend::decodedRecords() const {
+    return application_.prefs_.scope.decoder.enabled && !application_.data_.scopeHeld();
+}
+bool InstrumentBackend::record(scope::FrameLease &out) {
+    auto &a = application_;
+    if (!decodedRecords()) return a.data_.acquireScope(out);
+    if (a.decoder_.takeHostRecord(out)) return true; // The decoded record kept for hosts.
+    scope::FrameLease raw;
+    if (!a.data_.acquireScope(raw)) return false;
+    if (!a.decoder_.shows(raw.view().metadata())) return false; // Not decoded (yet): nothing, not taken.
+    out = std::move(raw);
+    return true;
 }
 void InstrumentBackend::stop() {
     auto &a=application_;
@@ -64,13 +89,17 @@ const scope::FrameView *InstrumentBackend::frame(bool refresh) {
     if (refresh) releaseFrame();
     application_.data_.noteFrameDemand(Board::milliseconds());
     demand();
-    if (!lease_.valid() && !application_.data_.acquireScope(lease_)) return nullptr;
+    if (!lease_.valid() && !record(lease_)) return nullptr;
     const auto &m = lease_.view().metadata();
-    application_.data_.frameHosts().taken(host_, m.sequence); // Leased: its memory is held by the lease now.
+    // Taken also when refused below: that refusal means this host read exactly this record already, so
+    // it is owed it no more (else FrameHosts would hold the next capture for it, HoldMs in one slot). A
+    // record not served by record() (not decoded yet) is never marked taken.
+    application_.data_.frameHosts().taken(host_, m.sequence);
     if (freshFrame_ && !application_.data_.scopeHeld() && m.sequence == previousFrameSequence_ && m.timestampUs == previousFrameTime_) {
         lease_.release(); return nullptr; // Leave the store writable until a newer DMA frame is published.
     }
     freshFrame_ = false;
+    leaseKey_ = decoding::RecordKey::of(m, application_.decoder_.generation()); // Frozen with the lease.
     return &lease_.view();
 }
 void InstrumentBackend::releaseFrame() {
@@ -196,4 +225,53 @@ bool InstrumentBackend::factoryRecordFormat(FactoryRecordReading &f) const {
     return true;
 }
 const char *InstrumentBackend::version() const { return OPENOSC_VERSION; }
+bool InstrumentBackend::frameKey(char *out, size_t capacity) const {
+    if (!lease_.valid()) return false;
+    const auto &k = leaseKey_;
+    char time[24]; size_t n = 0; char digits[24]; uint64_t v = k.timestampUs; // nano printf: no %llu.
+    do { digits[n++] = char('0' + v % 10); v /= 10; } while (v);
+    for (size_t i = 0; i < n; ++i) time[i] = digits[n - 1 - i];
+    time[n] = 0;
+    std::snprintf(out, capacity, "%lu,%lu,%s,%lu,%lu,0x%08lX", (unsigned long)k.generation, (unsigned long)k.sequence, time,
+                  (unsigned long)k.origin, (unsigned long)k.samples, (unsigned long)k.fingerprint); // Every field of RecordKey.
+    return true;
+}
+// DECode: the decoder's state and published result (its full record key), and its CSV through the one
+// export of the workspace: this session keeps only the ticket.
+bool InstrumentBackend::decodeReport(scpi::DecodeReport &r) const {
+    static constexpr const char *statuses[] = {"idle", "decoding", "done", "cancelled", "no_scale", "out_of_range", "channel_off",
+                                               "unsupported", "timing"};
+    static constexpr const char *protocols[] = {"OFF", "UART", "I2C", "SPI", "LIN", "CAN"};
+    const auto &d = application_.prefs_.scope.decoder;
+    r.enabled = d.enabled;
+    r.protocol = protocols[unsigned(d.protocol) < 6 ? unsigned(d.protocol) : 0];
+    const auto &results = application_.decoder_.results();
+    r.revision = results.revision();
+    const auto *set = d.enabled ? results.published() : nullptr;
+    r.result = set != nullptr;
+    if (!set) return true;
+    const auto &k = set->key();
+    r.protocol = protocols[unsigned(set->protocol()) < 6 ? unsigned(set->protocol()) : 0];
+    r.status = statuses[unsigned(set->status) < 9 ? unsigned(set->status) : 0];
+    r.events = set->count(); r.lost = set->lost(); r.dropped = set->dropped; r.overflows = set->overflows; r.clipped = set->clipped;
+    r.processed = set->processed; r.samples = set->samples;
+    r.generation = k.generation; r.sequence = k.sequence; r.timestampUs = k.timestampUs; r.origin = k.origin;
+    r.fingerprint = k.fingerprint; r.settingsHash = set->settingsHash();
+    r.fsNumerator = set->samplesPerSecond.numerator; r.fsDenominator = set->samplesPerSecond.denominator;
+    return true;
+}
+uint32_t InstrumentBackend::decodeExport(int16_t &error) {
+    auto &csv = decoding::workspaceExport();
+    const uint32_t ticket = application_.prefs_.scope.decoder.enabled
+        ? csv.begin(decoding::CsvExport::Owner::Usb, application_.decoder_.results(), application_.decoder_.settings(), "OpenOSC " OPENOSC_VERSION) : 0;
+    if (!ticket) error = csv.refusal() == decoding::CsvExport::Refusal::Busy ? -200 : -230;
+    return ticket;
+}
+int InstrumentBackend::decodeMeasure(uint32_t ticket, uint32_t &total) { return decoding::workspaceExport().measure(ticket, total); }
+size_t InstrumentBackend::decodeRead(uint32_t ticket, uint8_t *output, size_t capacity) {
+    return decoding::workspaceExport().read(ticket, output, capacity);
+}
+void InstrumentBackend::decodeEnd(uint32_t ticket) { decoding::workspaceExport().end(ticket); }
+int16_t InstrumentBackend::decodeSave() { return application_.saveDecoderCsv(Board::milliseconds()); }
+const char *InstrumentBackend::decodeSaved() const { return application_.decoderCsvSaved(); }
 } // namespace openosc

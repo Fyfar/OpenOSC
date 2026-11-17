@@ -27,6 +27,10 @@ struct IdleSettings {
         return dim && off && (backlightSeconds==0 || backlightSeconds==30 || backlightSeconds==60 || backlightSeconds==120);
     }
     uint32_t dimmedBrightness(uint32_t brightness) const { return dimPercent<brightness ? dimPercent : brightness; }
+    // Whether the key that ends the sleep only wakes (InputService::wake takes its stroke): only when
+    // the screen it was pressed on is dark, the idle level in force being 0. A visible idle
+    // backlight (5..25 %, or the working brightness below it) wakes and the key acts as usual.
+    bool wakeTakesKey(bool dimmed,uint32_t brightness) const { return dimmed && dimmedBrightness(brightness)==0; }
 };
 class IdlePolicy {
 public:

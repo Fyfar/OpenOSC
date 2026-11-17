@@ -161,6 +161,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::GeneratorLayout: generatorLayoutKeys(keys, now); break;
     case Panel::ScopeColors: scopeColorsKeys(keys, now); break;
     case Panel::Analyze: analyzeKeys(keys, now); break;
+    case Panel::Decoder: decoderPanelKeys(keys, now); break;
     case Panel::Channel:
     case Panel::Acquisition: scopeEditorKeys(keys, now); break;
     case Panel::Measurements: measurementKeys(keys, now); break;
@@ -171,7 +172,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
 void ApplicationController::dataKeys(uint32_t keys, uint32_t now, bool fine) {
     if (!keys) return;
     switch (state_.mode) {
-    case MeasurementMode::Oscilloscope: scopeKeys(keys, now, fine); break;
+    case MeasurementMode::Oscilloscope: if (decoderScreen()) decoderKeys(keys, now); else scopeKeys(keys, now, fine); break;
     case MeasurementMode::Multimeter: meterKeys(keys, now); break;
     case MeasurementMode::Generator: generatorKeys(keys, now); break;
     case MeasurementMode::Count: break;

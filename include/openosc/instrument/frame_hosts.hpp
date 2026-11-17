@@ -31,6 +31,12 @@ public:
     void rearm(unsigned host, uint32_t shown, uint32_t now) { taken(host, shown); demand(host, now); }
     // The session ended (reset, disconnect, new session): it is owed nothing.
     void end(unsigned host) { if (host < attached_) hosts_[host] = {}; }
+    // Whether a host asks for records now (demanded within DemandMs).
+    bool demanding(uint32_t now) const {
+        for (unsigned h = 0; h < attached_; ++h)
+            if (hosts_[h].active && uint32_t(now - hosts_[h].demandAt) < DemandMs) return true;
+        return false;
+    }
     // Whether the accepted record `sequence` (accepted at `acceptedAt`) is still owed to a host.
     bool owed(uint32_t sequence, uint32_t acceptedAt, uint32_t now) const {
         if (uint32_t(now - acceptedAt) >= HoldMs) return false;

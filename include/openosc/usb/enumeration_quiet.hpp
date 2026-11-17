@@ -76,6 +76,13 @@ public:
     bool pending() const { return pending_ != Kind::None; }
     // A full stop: nothing waits any more, the capture may run; the next start is a new request.
     void stop() { window_.stopped(); release(); }
+    // A healthy (configured) host: its window ends, and a reconnect still waiting for a quiet capture
+    // is over with the episode that asked for it (else a later proof, e.g. a HOLD released, would drop
+    // a working link); the capture is released. A waiting start stays: it is the device's own attach.
+    void configured() {
+        window_.configured();
+        if (pending_ == Kind::Reconnect) release();
+    }
     // A logical request (InstrumentUsb::reattach): its window opens now, before the attach.
     void request(uint32_t now) { window_.request(); window_.attach(now); }
     // InstrumentUsb::start: `initialized` the USBD set-up's result. True when attached or waiting.

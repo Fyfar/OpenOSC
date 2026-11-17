@@ -23,6 +23,17 @@ public:
     // A physical press needs a reading of this session no older than this (a blind 20 is never sent).
     static constexpr uint64_t FreshUs = 2000000;
     bool selectFunction(Function function, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
+    // A physical F1-F4 as the factory's (706S F1 0x08043C5C, 703S 0x080432D8: 50 50 at the release, no
+    // reply awaited): one group key a press, needing only a packet of this session (not a known
+    // function). No target is guessed and none is confirmed: busy until the pair has left the UART, Ok
+    // then, Timeout/HardwareError when it could not leave (GroupMs). The readings show what the
+    // controller did; a key it ignores is not repeated. SCPI and the restore use selectFunction.
+    // Once its pair has gone (or may have: a failed or stuck transmit), the commands that judge packets
+    // (selectFunction, requestKey, setRange, pressRange) are refused until a packet newer than its end
+    // (fresh()): the controller may apply the key later, so a packet before it proves nothing. Another
+    // group key needs none (one pair a press, as the factory's).
+    static constexpr uint32_t GroupMs = 250;
+    bool pressGroup(CommandGroup group, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
     bool requestKey(KeyCommand::Action action, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
     bool setRange(unsigned index, const Result &latest, uint32_t nowMs, uint64_t minimumUs);
     // The physical AUTO/RANGE (KeyGestures press, release/releaseLate, holdRepeat): the qualified press
@@ -41,17 +52,23 @@ public:
     bool owes() const { return stroke_.active(); }
     // The UART stopped or failed: nothing more can be sent; everything ends without a status.
     void abandon();
-    bool busy() const { return selector_.busy() || key_.busy() || range_.busy() || stroke_.active(); }
+    bool busy() const { return selector_.busy() || key_.busy() || range_.busy() || stroke_.active() || group_ == DataStatus::Busy; }
     DataStatus status() const {
-        return operation_ == Operation::Key ? key_.status() : operation_ == Operation::Range ? range_.status() : selector_.status();
+        return operation_ == Operation::Key ? key_.status() : operation_ == Operation::Range ? range_.status() :
+               operation_ == Operation::Group ? group_ : selector_.status();
     }
-    DataStatus selectionStatus() const { return selector_.status(); }
+    // The last function choice: a selection (selectFunction) or a group key (pressGroup).
+    DataStatus selectionStatus() const { return groupChosen_ ? group_ : selector_.status(); }
 private:
-    enum class Operation : uint8_t { Function, Key, Range };
+    enum class Operation : uint8_t { Function, Key, Range, Group };
     bool idle() const { return !busy(); }
     bool startStroke(CommandGroup command, uint32_t nowMs);
     void serviceStroke(CommandPort &port, const Result &latest, uint32_t nowMs);
     void cancelOwner();
+    void serviceGroup(CommandPort &port, const Result &latest, uint32_t nowMs);
+    void cancelGroup() { if (group_ == DataStatus::Busy) group_ = DataStatus::NoData; }
+    // Not a packet from before the last group key's end (pressGroup).
+    bool fresh(const Result &latest) const { return !fenced_ || int32_t(latest.sequence - fence_) > 0; }
     FunctionSelector selector_;
     KeyCommand key_;
     RangeSelector range_;
@@ -59,5 +76,9 @@ private:
     Operation operation_ = Operation::Function;
     bool physical_ = false; // The Key operation is the physical AUTO/RANGE's.
     bool ended_ = false;    // The running stroke's end went (EndSent, Released).
+    CommandGroup groupKey_ = CommandGroup::Voltage; // pressGroup's key, its status and progress.
+    DataStatus group_ = DataStatus::NoData;
+    bool groupSent_ = false, groupChosen_ = false, fenced_ = false;
+    uint32_t groupDeadline_ = 0, fence_ = 0; // fence_: the newest packet at the group key's end.
 };
 } // namespace openosc::dmm

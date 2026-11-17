@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/application/decode_csv_file.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/input.hpp"
@@ -45,8 +46,11 @@ void ApplicationController::shutdownNotice(const char *text, uint32_t now) {
 // The controller's side of ShutdownSequence: what each step does on this instrument.
 class ApplicationController::ShutdownSteps final : public ShutdownSequence::Steps {
 public:
+    static constexpr const char *DecodeCsvShutdown = "DECODE CSV CANCELLED: SHUTDOWN";
     explicit ShutdownSteps(ApplicationController &a) : a_(a) {}
-    void prepare() override { a_.imageReader_.cancel(); a_.images_.cancelClear(); }
+    // Every background file user ends before the saves and the unmount: an unfinished decoded CSV is
+    // closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
+    void prepare() override { a_.imageReader_.cancel(); a_.images_.cancelClear(); decodeCsvFile().cancel(DecodeCsvShutdown); }
     bool screenshotBusy() override { return a_.shots_.busy(); }
     void cancelScreenshot() override { a_.shots_.cancel(); }
     bool saveTheme() override { SettingsStore files(a_); return a_.saves_.flushTheme(files); }
@@ -60,7 +64,10 @@ public:
     // the volume is still mounted (BootGuard).
     void stopInstruments() override { if (a_.usb_) a_.usb_->stop(); a_.stopBootGuard(); a_.data_.beginShutdown(); }
     bool instrumentsStopped() override { return a_.data_.shutdownReady(); }
-    void cancelRecorders() override { a_.data_.scopeRecorder().cancel(); a_.data_.meterLogger().cancel(); }
+    void cancelRecorders() override {
+        a_.data_.scopeRecorder().cancel(); a_.data_.meterLogger().cancel();
+        decodeCsvFile().cancel(DecodeCsvShutdown); // Already ended in prepare(): idempotent.
+    }
     // Finished steps, failed or not (each may end after a NOR timeout): watchdog progress.
     bool unmount() override { const bool done = a_.fs_.unmount(); Watchdog::progress(); return done; }
     bool restoreAddressing() override { const bool done = a_.nor_.restoreLegacyAddressing(); Watchdog::progress(); return done; }

@@ -6,8 +6,9 @@ extern uint32_t _estack, _sitext, _stext, _etext, _sidata, _sdata, _edata, _sbss
 #ifdef OPENOSC_APPLICATION
 extern uint32_t _sidma_data, _sdma_data, _edma_data;
 #endif
-#ifdef OPENOSC_USB_TRACE
-extern uint64_t _susb_trace, _eusb_trace; // The ITCM trace ring (.usb_trace), 8-byte aligned.
+#ifdef OPENOSC_APPLICATION
+// ITCM: the decoder workspace and the trace ring (.usb_trace, empty unless OPENOSC_USB_TRACE), 8-byte aligned.
+extern uint64_t _sdecode_workspace, _edecode_workspace, _susb_trace, _eusb_trace;
 #endif
 void Reset_Handler();
 void Default_Handler();
@@ -39,11 +40,13 @@ void Reset_Handler() {
     for (auto* p = &_sdma_data; p < &_edma_data; ++p) *p = *sourceDma++;
 #endif
     for (auto* p = &_sbss; p < &_ebss; ++p) *p = 0;
-#ifdef OPENOSC_USB_TRACE
-    // Before any trace hook: ITCM enabled, with read-modify-write for its ECC (the ring's word
-    // stores are narrower than an ECC word), and every ECC word of the ring written once.
+#ifdef OPENOSC_APPLICATION
+    // Before any constructor (the decoder's job lives there) or trace hook: ITCM enabled, with
+    // read-modify-write for its ECC (byte and halfword stores are narrower than an ECC word), and
+    // every ECC word of its sections written once in 64-bit stores.
     SCB->ITCMCR |= SCB_ITCMCR_EN_Msk | SCB_ITCMCR_RMW_Msk;
     __DSB(); __ISB();
+    for (auto* p = &_sdecode_workspace; p < &_edecode_workspace; ++p) *p = 0;
     for (auto* p = &_susb_trace; p < &_eusb_trace; ++p) *p = 0;
     __DSB();
 #endif

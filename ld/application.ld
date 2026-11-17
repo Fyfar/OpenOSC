@@ -5,7 +5,8 @@ MEMORY {
     AXI (rw) : ORIGIN = 0x24000000, LENGTH = 1M
     AHB (rw) : ORIGIN = 0x30000000, LENGTH = 128K
     SRAM4 (rw) : ORIGIN = 0x38000000, LENGTH = 32K
-    /* ITCM (64 KiB at 0, CPU and debugger only): the USB trace ring of firmware_trace builds. The
+    /* ITCM (64 KiB at 0; the CPU, the debugger and MDMA reach it, DMA1/2 and DMA2D do not): the
+       decoder workspace and, in firmware_trace builds, the USB trace ring (sections below). The
        first 1 KiB stays unused, so no object has the null address. */
     ITCM (rw) : ORIGIN = 0x00000400, LENGTH = 63K
 }
@@ -48,7 +49,10 @@ SECTIONS {
     .generator (NOLOAD) : { . = ALIGN(32); KEEP(*(.generator)) } > SRAM4
     .settings_workspace (NOLOAD) : { . = ALIGN(32); KEEP(*(.settings_workspace)) . = ALIGN(32); } > SRAM4
     . = ALIGN(8); _end = .; PROVIDE(end = .);
-    /* Empty unless OPENOSC_USB_TRACE: Reset_Handler then enables ITCM and zeroes it in 64-bit ECC words. */
+    /* ITCM (CPU and MDMA only, no DMA1/2 or DMA2D): the protocol decoder's workspace (its job, lease and
+       two result sets) and, in OPENOSC_USB_TRACE builds, the trace ring. Reset_Handler enables ITCM and
+       zeroes both in 64-bit ECC words before any constructor runs (the job is built in place later). */
+    .decode_workspace (NOLOAD) : { . = ALIGN(8); _sdecode_workspace = .; KEEP(*(.decode_workspace)) . = ALIGN(8); _edecode_workspace = .; } > ITCM
     .usb_trace (NOLOAD) : { _susb_trace = .; KEEP(*(.usb_trace)) . = ALIGN(8); _eusb_trace = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
@@ -58,6 +62,8 @@ SECTIONS {
     ASSERT(SIZEOF(.lvgl_heap) == 61440, "LVGL DMA2D workspace must reside in AXI SRAM")
     ASSERT(SIZEOF(.capture_arena) == 393216, "Record banks 1-3 must be 384 KiB of AXI SRAM")
     ASSERT(SIZEOF(.acquisition) == 131072, "Record bank 0 must be the 128 KiB AHB SRAM")
+    ASSERT(SIZEOF(.decode_workspace) <= 40960, "Decoder workspace exceeds its 40 KiB plan")
+    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) <= 64512, "ITCM: decoder workspace and trace ring exceed 63 KiB")
     ASSERT(SIZEOF(.capture_trial) == 16384, "The AutoSetup trial area must be AXI SRAM")
     ASSERT(SIZEOF(.capture_nodes) == 960, "MDMA history nodes must be AXI SRAM")
     ASSERT(LOADADDR(.dma_data) + SIZEOF(.dma_data) <= __openosc_flash_end, "Application exceeds Flash reservation")

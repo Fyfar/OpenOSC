@@ -7,6 +7,7 @@
 #include "openosc/settings/meter_appearance.hpp"
 #include "openosc/settings/scope_appearance.hpp"
 #include "openosc/settings/screen_arrangement.hpp"
+#include "openosc/decode/settings.hpp"
 
 namespace openosc {
 struct ScopePreferences {
@@ -28,6 +29,9 @@ struct ScopePreferences {
     // status bar, and the colour scheme with its per-role overrides. Files before them: defaults.
     ScopeArrangement arrangement;
     ScopeAppearance appearance;
+    // The protocol decoder (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md): off by default; files before it, or
+    // an unreadable "decoder" object: the defaults, the rest of the file as it is.
+    decoding::Settings decoder;
     bool valid() const;
 };
 struct MeterPreferences {

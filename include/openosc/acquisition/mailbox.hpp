@@ -15,6 +15,10 @@ public:
     const FrameView &view() const { return view_; }
     bool valid() const { return owner_ != nullptr; }
     void release();
+    // Another lease of the same record (the same owner, this lease's annotated view): it keeps the record
+    // as this one does, released on its own. False when this one is not valid or `out` already is.
+    // Foreground only, as acquire/release.
+    bool share(FrameLease &out) const;
     bool annotateTrigger(bool found, uint32_t index) {
         if (!valid())
             return false;

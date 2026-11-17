@@ -242,6 +242,9 @@ class FrameView::PairCursor {
 public:
     // The next n points (fewer once the record ends) into out[0] (CH1) and out[1] (CH2).
     uint32_t column(uint32_t n, ColumnStats (&out)[2]);
+    // The next point's two codes (false once the record ends): the same word, bus correction and
+    // order as column() and as each channel's Cursor (the decoder's CANH - CANL).
+    bool next(int16_t &ch1, int16_t &ch2);
 private:
     template <class Read> uint32_t reduce(uint32_t n, ColumnStats (&out)[2], Read read);
     uint32_t corrected(uint16_t word, uint32_t index) const; // A suspect point's codes, packed.

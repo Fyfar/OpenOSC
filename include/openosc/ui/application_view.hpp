@@ -33,7 +33,17 @@ public:
     void scopeAutoSetup(bool active) { scope_.autoSetup(active); refreshIndicators(); }
     void scopeCalibrating(bool active) { scope_.calibrating(active); refreshIndicators(); }
     void scopeTriggerState(scope::TriggerMode mode, bool waiting) { scope_.triggerState(mode, waiting); refreshIndicators(); }
-    bool waveformVisible() const { return !host_.overlayActive(); }
+    // Plan §4.4: a menu or panel over the Scope (the capture may rest), and whether the trace is
+    // drawn (not under a menu, not Decoder only: projection, readouts and prepareColumns need it).
+    bool overlayActive() const { return host_.overlayActive(); }
+    bool traceDrawn() const { return host_.traceDrawn(); }
+    // The protocol decoder's view (ScreenHost::decoder), then what it shows: the table (with its
+    // info row) and, under the trace, the result of the record the trace shows (DecodeJob::shows).
+    void decoder(bool shown, decoding::View view) { host_.decoder(shown, view); } // The same state: nothing.
+    bool decoderShown() const { return host_.decoderShown(); }
+    void decoderResults(const ui::DecodeTable::Content &table, const char *info, const decoding::ResultSet *traced);
+    const ui::DecodeTable &decodeTable() const { return host_.decodeTable(); }
+    const ui::DecodeStrip &decodeStrip() const { return host_.decodeStrip(); }
     void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel) { scope_.settings(metadata, channel); }
     void scopeContext(unsigned channel, plot::Focus focus) { scope_.context(channel, focus); }
     // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus().
@@ -81,6 +91,7 @@ public:
     void batteryDisplay(uint32_t mode);
     void fps(bool visible, uint32_t value);
     WaveformWidget &waveform() { return host_.waveform(); }
+    const WaveformWidget &waveform() const { return host_.waveform(); }
     const ui::MeterSummary &meterSummary() { return host_.meterSummary(); }
     const ui::FunctionIcon &functionIcon() { return host_.functionIcon(); }
     const ui::MeterCards &meterCards() { return host_.meterCards(); }

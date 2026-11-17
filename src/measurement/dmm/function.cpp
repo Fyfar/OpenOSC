@@ -32,16 +32,6 @@ CommandGroup Functions::group(Function f) {
     if (f == Function::MillivoltsDc || f == Function::MillivoltsAc) return CommandGroup::Millivolts;
     return CommandGroup::Milliamps;
 }
-Function Functions::next(CommandGroup group, Function current) {
-    static constexpr Function resistance[] = {Function::Resistance, Function::Continuity, Function::Diode, Function::Capacitance};
-    if (group == CommandGroup::ResistanceGroup) {
-        for (unsigned i = 0; i < 4; ++i) if (resistance[i] == current) return resistance[(i + 1) % 4];
-        return resistance[0];
-    }
-    const auto first = group == CommandGroup::Voltage ? Function::VoltageDc : group == CommandGroup::Current ? Function::CurrentDc :
-                       group == CommandGroup::Millivolts ? Function::MillivoltsDc : Function::MilliampsDc;
-    return current == first ? Function(unsigned(first) + 1) : first;
-}
 bool FunctionSelector::request(Function function, const Result &latest, uint32_t now, uint64_t minimumTimestampUs) {
     if (function >= Function::Unknown || (busy() && function != requested_)) return false;
     if (busy()) return true;

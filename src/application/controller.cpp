@@ -115,7 +115,7 @@ namespace openosc {
             // coincided with USB33RDY dips and bus resets on the device (cause not established).
             // A hidden trace needs no new frames, and such a record takes under a millisecond when
             // one is asked for, so those restarts wait.
-            if (uiReady_ && !view_.waveformVisible() && !data_.zeroBusy() && !autoBusy() &&
+            if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !autoBusy() &&
                 data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
             const bool settling = uint32_t(now - hiddenAt_) < OverlaySettleMs || usb.enumerating(now);
             data_.pauseCapture(state_.mode == MeasurementMode::Oscilloscope && settling && data_.fullRateCapture(), now);
@@ -154,6 +154,8 @@ namespace openosc {
             if (uiReady_) { view_.service(now); render(); }
         } else {
             if (InputService::take(input)) { onKeys(input.events,now); refreshSoftKeys(); } // Captions follow at once.
+            if (prefs_.scope.decoder.enabled) serviceDecoder(now); // After input, USB and the instruments (plan §5.2).
+            serviceDecoderCsv(now); // A file being saved: one bounded slice; nothing when none is.
             store(now);
             if (uiReady_) {
                 const uint32_t start = DWT->CYCCNT;
@@ -176,20 +178,13 @@ void ApplicationController::render() {
     rendering_ = false;
     ahead_.release();
 }
-// While the display waits on DMA2D (RenderIdle, no LVGL): the newest frame not yet shown, looked
-// at without being taken, has its columns reduced into the ColumnCache the projection then uses.
-void ApplicationController::prepareColumns() {
-    if (!rendering_ || state_.mode != MeasurementMode::Oscilloscope || panel_ != Panel::None || state_.settingsOpen || !uiReady_ ||
-        data_.scopeHeld() || !view_.waveformVisible()) return;
-    const auto &model = view_.waveform().model();
-    if (!ahead_.valid()) {
-        if (!data_.acquireScope(ahead_, false)) return;
-    }
-    if (model.hasFrame() && ahead_.view().metadata().sequence == model.metadata().sequence) {
-        ahead_.release(); // Already shown: do not reduce it again or hold up publication of the next frame.
-        return;
-    }
-    plot::applicationColumns().prepare(ahead_.view(), model.options(), model.viewport().width, model.viewport().height);
+// One slice of the record being decoded (plan §5.2): the budget is checked after each 128-point
+// block, so a slice ends at most one block past it. DWT counts core cycles at any clock profile.
+void ApplicationController::serviceDecoder(uint32_t now) {
+    static constexpr uint32_t SliceUs = 300;
+    syncHostRecord(now);
+    if (!decoder_.running()) return;
+    decoder_.step({[]() -> uint32_t { return DWT->CYCCNT; }, SystemCoreClock / 1000000U * SliceUs, now});
 }
 void ApplicationController::applyPreferences() {
     state_.mode = static_cast<MeasurementMode>(prefs_.mode);
@@ -197,6 +192,7 @@ void ApplicationController::applyPreferences() {
     state_.scope.measurements = prefs_.scope.measurements;
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     state_.meter.function = prefs_.meterFunction;
+    configureDecoder();
     // Only the hold mode and its parameters: a cycle or snapshot never comes back by itself.
     if (data_.meter().holdCycle().settings() != prefs_.meter.hold) data_.configureMeterHold(prefs_.meter.hold);
     idle_.configure(prefs_.idle,Board::milliseconds());

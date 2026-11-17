@@ -53,6 +53,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         acquisitionEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
         acquisitionEditor_.snapshot(view_.waveform().model().metadata());
         openPanel(Panel::Acquisition, acquisitionEditor_); return;
+    case Actions::Decoder: openDecoder(0); return; // Protocol: Off until chosen.
     case Actions::CenterChannels:
         if (!centerChannels(now)) return;
         break;

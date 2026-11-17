@@ -18,10 +18,14 @@ bool History::value(size_t index, double &output) const {
     output = samples_[(cursor_ + Capacity - size_ + index) % Capacity];
     return true;
 }
-void Session::restart(Function function, uint64_t untilUs) {
+void Session::reselect() {
     resetStatistics();
     settle_.clear();
     detector_.reselect(); // The old function's snapshot and window go with the selection.
+    awaiting_ = false;
+}
+void Session::restart(Function function, uint64_t untilUs) {
+    reselect();
     awaited_ = function;
     awaitUntilUs_ = untilUs;
     awaiting_ = true;

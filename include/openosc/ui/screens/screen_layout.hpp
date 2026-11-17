@@ -15,6 +15,19 @@ struct BlockSpan {
     bool shown = false;
     constexpr int bottom() const { return y + height - 1; }
 };
+// The rows of the protocol decoder's table (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md §4.2, §4.3), from
+// its top, each one openosc_mono_12 line (13 px): the info row (state, warnings, rec/s, age,
+// coverage) when the table has one, the header, then `events` event rows (or Detail lines).
+struct DecoderTableRows {
+    static constexpr int Row = 13;
+    bool info = false;
+    unsigned events = 0;
+    constexpr int header() const { return info ? Row : 0; }                      // Its offset.
+    constexpr int event(unsigned row) const { return header() + Row * int(row + 1); } // Row `row`'s offset.
+    constexpr int height() const { return event(events); }
+    constexpr bool operator==(const DecoderTableRows &o) const { return info == o.info && events == o.events; }
+    constexpr bool operator!=(const DecoderTableRows &o) const { return !(*this == o); }
+};
 class ScreenLayout {
 public:
     static constexpr int Top = StatusBarLayout::Height, Bottom = 240, Body = Bottom - Top; // y 20..239.
@@ -42,7 +55,16 @@ public:
     // keeps its curve and its level line (GeneratorPreview needs 60 for both).
     static constexpr int GeneratorTitle = 0, GeneratorDigits = 18, GeneratorUnit = 37, GeneratorApplied = 77;
     static constexpr int GeneratorFrequency = 110, GeneratorPreview = 68;
-
+    // The protocol decoder's own Scope layout (plan §4.2), not an order: the work area from the
+    // status bar down, the keys at MenuKeysY. Decoder only: the table's info row, header and 12 rows.
+    // Split: the waveform's marker margin and a 92-row plot over the header and 5 rows; no info row
+    // there (the plan's 5 rows in the same 78 px; the status bar keeps RUN/HOLD). Wave + annotations
+    // keeps the user's order: its strip covers the plot's bottom rows.
+    static constexpr int DecoderRow = DecoderTableRows::Row, DecoderRows = 12, SplitRows = 5;
+    static constexpr int SplitWaveform = plot::PlotFrame::Top + 92, AnnotationStrip = 12;
+    static constexpr DecoderTableRows DecoderOnlyTable{true, DecoderRows}, SplitTable{false, SplitRows};
+    // Decoder only's height for `rows` event rows (its info row and header included).
+    static constexpr int decoderTable(int rows) { return DecoderTableRows{true, unsigned(rows)}.height(); }
     template<class Block>
     static void stack(const BlockOrder<Block> &order, const int (&heights)[BlockOrder<Block>::Size],
                       BlockSpan (&spans)[BlockOrder<Block>::Size]) {
@@ -84,6 +106,9 @@ public:
     }
 };
 static_assert(ScreenLayout::ButtonWidth == 76, "four equal 76 px zones");
+static_assert(ScreenLayout::Top + ScreenLayout::DecoderOnlyTable.height() <= ScreenLayout::MenuKeysY, "Decoder only: info, header and 12 rows above the keys");
+static_assert(ScreenLayout::Top + ScreenLayout::SplitWaveform + ScreenLayout::SplitTable.height() <= ScreenLayout::MenuKeysY,
+              "Split: the plot, the header and 5 rows above the keys");
 static_assert(ScreenLayout::MenuKeysY == 208 && ScreenLayout::MenuTop + ScreenLayout::MenuHeight <= 204, "A menu ends above its keys");
 static_assert(ScreenLayout::Readouts + ScreenLayout::Waveform + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the Scope fits");
 static_assert(ScreenLayout::GeneratorFrequency + ScreenLayout::GeneratorPreview + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the generator fits");

@@ -3,7 +3,7 @@
 namespace openosc {
 // AutoSetup keeps the frame on show in its arena region and measures in the trial area.
 bool DataAccess::retainScope() {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (retainedRegion_ || zeroBusy()) return !zeroBusy();
     const bool held = scopeHeld_;
     if (holdPending_) { holdPending_ = false; stopCapture(false); }

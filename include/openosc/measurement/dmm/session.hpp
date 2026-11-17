@@ -125,6 +125,10 @@ public:
     // (or any, once the packet time passes `untilUs`, when the selection did not take) seed them;
     // packets of the old function still in flight do not.
     void restart(Function function, uint64_t untilUs);
+    // An accepted group key (a physical F1-F4): the statistics, the overload settling and a hold mode's
+    // snapshot restart; no function is awaited (the readings of the old one still in flight count until
+    // the controller's function change restarts the statistics again, as the factory's).
+    void reselect();
     bool awaitingFunction() const { return awaiting_; }
     // The factory's no-reading placeholder: "--." in the first three characters.
     static bool placeholder(const Result &result) { return !std::strncmp(result.mainText, "--.", 3); }

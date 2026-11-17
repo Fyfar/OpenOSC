@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/scpi/backend.hpp"
 #include "openosc/acquisition/mailbox.hpp"
+#include "openosc/decode/record_key.hpp"
 
 namespace openosc {
 class ApplicationController;
@@ -21,6 +22,14 @@ public:
     const scope::FrameView *frame(bool refresh) override;
     void releaseFrame() override;
     void endSession() override;
+    bool frameKey(char *output, size_t capacity) const override;
+    bool decodeReport(scpi::DecodeReport &) const override;
+    uint32_t decodeExport(int16_t &error) override;
+    int decodeMeasure(uint32_t ticket, uint32_t &total) override;
+    size_t decodeRead(uint32_t ticket, uint8_t *output, size_t capacity) override;
+    void decodeEnd(uint32_t ticket) override;
+    int16_t decodeSave() override;
+    const char *decodeSaved() const override;
     const dmm::Result &meter() const override;
     DataStatus meterStatus() const override;
     bool selectFunction(dmm::Function) override;
@@ -59,6 +68,9 @@ public:
 private:
     ApplicationController &application_;
     scope::FrameLease lease_;
+    decoding::RecordKey leaseKey_; // The lease's full key, frozen when it was taken (WAV:KEY?).
+    bool decodedRecords() const;   // Complete in RUN: only decoded records are served.
+    bool record(scope::FrameLease &out);
     unsigned host_; // Its slot in DataAccess::frameHosts().
     void demand() const; // This session reads records: the accepted one on show is kept for it.
     uint64_t previousFrameTime_ = 0;

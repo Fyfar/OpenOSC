@@ -4,19 +4,19 @@
 #include <cstdio>
 
 namespace openosc::ui {
-// ANALYZE: panels to open (Measurements, Display, Layout, Colors, Acquisition), actions, and the cursor lines
+// ANALYZE: panels to open (Measurements, Display, Layout, Colors, Acquisition, Decoder), actions, and the cursor lines
 // (a choice: Off, Time, Level, Time+Level), taken at once.
 class ScopeActions final : public PropertyList {
 public:
-    enum Action { Measurements, Cursors, Display, Layout, Colors, Acquisition, ArmSingle, SaveRaw, SaveCsv, Spectrum, CenterChannels, ResetPan, TriggerMidpoint, Count };
+    enum Action { Measurements, Cursors, Display, Layout, Colors, Acquisition, Decoder, ArmSingle, SaveRaw, SaveCsv, Spectrum, CenterChannels, ResetPan, TriggerMidpoint, Count };
     explicit ScopeActions(const plot::Options &options = {}) : cursors_(options.cursors), spectrum_(options.mode == plot::Mode::Spectrum) {}
     const char *title() const override { return "ANALYZE"; }
     unsigned count() const override { return Count; }
     PropertyKind kind(unsigned row) const override {
-        return row == Cursors ? PropertyKind::Choice : row == Measurements || row == Display || row == Layout || row == Colors || row == Acquisition ? PropertyKind::Page : PropertyKind::Action;
+        return row == Cursors ? PropertyKind::Choice : row == Measurements || row == Display || row == Layout || row == Colors || row == Acquisition || row == Decoder ? PropertyKind::Page : PropertyKind::Action;
     }
     void name(unsigned row, char *output, size_t capacity) const override {
-        static constexpr const char *names[] = {"Measurements", "Cursors", "Display", "Layout", "Colors", "Acquisition",
+        static constexpr const char *names[] = {"Measurements", "Cursors", "Display", "Layout", "Colors", "Acquisition", "Decoder",
             "Rearm Single", "Save RAW", "Save CSV","FFT spectrum", "Center channels", "Reset pan", "Trigger 50%"};
         std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
     }

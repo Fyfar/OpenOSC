@@ -422,12 +422,25 @@ template <class Read> __attribute__((always_inline)) inline uint32_t FrameView::
 }
 __attribute__((noinline)) uint32_t FrameView::PairCursor::column(uint32_t n, ColumnStats (&out)[2]) {
     const auto &f = frame_;
-    if (f.split_.historyWords) // Each word through the split mapping; the age is resolved per point.
-        return reduce(n, out, [&f](uint32_t p) __attribute__((always_inline)) { return f.split_.word(f.banks_, p & 3, p >> 2, f.laneRing()); });
+    if (f.split_.historyWords) { // Each word through the split mapping; the age is resolved per point.
+        const uint32_t lane = f.laneRing(); // Invariant of the record: no division per word.
+        return reduce(n, out, [&f, lane](uint32_t p) __attribute__((always_inline)) { return f.split_.word(f.banks_, p & 3, p >> 2, lane); });
+    }
     if (f.metadata_.layout == Layout::FourBanks)
         return reduce(n, out, FourBanksRead{{f.banks_[0], f.banks_[1], f.banks_[2], f.banks_[3]}});
     const uint16_t *bank = f.banks_[0];
     return reduce(n, out, [bank](uint32_t p) __attribute__((always_inline)) { return bank[p]; });
+}
+bool FrameView::PairCursor::next(int16_t &ch1, int16_t &ch2) {
+    if (!remaining_) return false;
+    const auto &f = frame_;
+    const uint32_t p = position_;
+    const uint16_t word = f.wordAt(p);
+    const uint32_t c = __builtin_expect(AdcBusGlitch::suspectWord(word), 0) ? corrected(word, index_) : codes(spread(word));
+    ch1 = int16_t(c); ch2 = int16_t(int32_t(c) >> 16);
+    --remaining_; ++index_;
+    if (++logical_ == 0 || ++position_ == f.metadata_.ring) position_ = 0;
+    return true;
 }
 FrameView FrameView::withTrigger(bool found, uint32_t index) const {
     FrameView view = *this;

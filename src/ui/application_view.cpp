@@ -107,6 +107,12 @@ void ApplicationView::placeFps() {
     lv_obj_set_hidden(fps_, !visible);
     if (visible) lv_obj_move_foreground(fps_);
 }
+void ApplicationView::decoderResults(const ui::DecodeTable::Content &table, const char *info, const decoding::ResultSet *traced) {
+    auto &t = host_.decodeTable();
+    if (t.visible()) t.show(table, info);
+    auto &strip = host_.decodeStrip();
+    if (strip.visible()) strip.show(traced, table.sets, table.revision, host_.waveform().model().viewport());
+}
 void ApplicationView::batteryDisplay(uint32_t mode) {
     battery_.display(mode);
     refreshIndicators();

@@ -3,7 +3,7 @@
 namespace openosc {
 ClockSuspend DataAccess::suspendClockUsers() {
     if (clockSuspended_) return ClockSuspend::Suspended;
-    releaseReadout(); // The background readout yields, as for any change; the scheduler asks again.
+    revokeBackground(); // The background readers yield, as for any change; they ask again.
     inspected_.release(); // DataAccess's own trigger inspection lease, renewed each poll.
     // Every refusal comes before anything stops: a busy instrument keeps running untouched.
     const uint32_t ownLeases = heldFrame_.valid() ? 1U : 0U; // HOLD keeps its record through the change.

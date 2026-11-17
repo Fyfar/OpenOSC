@@ -19,6 +19,10 @@
 #include "openosc/ui/editors/arrangement_properties.hpp"
 #include "openosc/ui/editors/scope_appearance_properties.hpp"
 #include "openosc/ui/editors/scope_editor.hpp"
+#include "openosc/ui/editors/decoder_properties.hpp"
+#include "openosc/decode/workspace.hpp"
+#include "openosc/decode/record_rate.hpp"
+#include "openosc/decode/table_text.hpp"
 #include "openosc/application/readout_scheduler.hpp"
 #include "openosc/application/run_mode_switch.hpp"
 #include "openosc/ui/editors/measurement_editor.hpp"
@@ -198,6 +202,39 @@ private:
     void buildView();   // The view rebuilt over the theme in force, with applyLooks.
     void refreshMeterPanel();
     void analyzeKeys(uint32_t keys, uint32_t now);
+    // The protocol decoder (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md; decoder_keys.cpp). Its job and
+    // result sets live in the ITCM workspace (decode/workspace.hpp), not in this object.
+    bool decoderScreen() const; // Split or Decoder only in front: the decoder's own keys (§4.4).
+    void decoderKeys(uint32_t keys, uint32_t now);
+    void decoderPanelKeys(uint32_t keys, uint32_t now); // Panel::Decoder (Analyze > Decoder, F1, F2).
+    void openDecoder(unsigned row);
+    void decoderSummary(); // Save CSV's and Detect baud's values in the panel.
+    void baudAction(uint32_t now);                         // Detect baud: search the held record, or apply its hint.
+    bool baudHintReady() const;                            // A confirmed hint for the settings in force.
+    void baudHintText(char *out, size_t capacity) const;
+    void applyDecoder(const decoding::Settings &settings, uint32_t now); // Saved, the job and the view follow.
+    void configureDecoder(); // prefs_' decoder to the job; Off: no job, no revocation callback.
+    bool scopeFrame(scope::FrameLease &frame); // The record the trace shows next (displayData).
+    void feedDecoder();  // Without a trace: the newest record to the job.
+    void noteSkipped();  // A record not decoded while one runs: counted once (looked at, not taken).
+    void showDecoder(uint32_t now); // The view's decoder state and results (each display pass).
+    void jumpToEvent(uint32_t now); // F3: the held trace at the selected event.
+    // Stage 7 (decode_save.cpp): the published result as /openosc/DECODE/DECnnnnn.CSV (menu, DECode:SAVE):
+    // 0 started, -200 busy or no storage, -230 no finished result; written a slice a loop pass.
+    int16_t saveDecoderCsv(uint32_t now);
+    void serviceDecoderCsv(uint32_t now);
+    const char *decoderCsvSaved() const; // DECode:SAVE?: "BUSY", the last file, or why it failed.
+    const decoding::ResultSet *decoderResult() const; // The result on show (table, strip, keys).
+    void serviceDecoder(uint32_t now); // One bounded slice of the record being decoded (the main loop).
+    // The decoded record kept for USB hosts (DecodeJob's host share): shared while a host asks for
+    // records; dropped once FrameHosts owes it to none (every host took it, DemandMs, HoldMs, session end).
+    void syncHostRecord(uint32_t now);
+    bool holdKeys(uint32_t keys, uint32_t now); // HOLD/SAVE: RUN <-> HOLD, as on every Scope screen.
+    decoding::DecodeJob &decoder_ = decoding::workspaceJob();
+    ui::DecoderProperties decoderEditor_;
+    uint16_t decoderRow_ = 0, decoderLine_ = 0; // The selected event; Detail's first line shown.
+    bool decoderDetail_ = false;                  // MENU on a row: its Detail.
+    decoding::RecordRate decoderRate_;
     void scopeEditorKeys(uint32_t keys, uint32_t now);
     void measurementKeys(uint32_t keys, uint32_t now);
     void generatorEditorKeys(uint32_t keys, uint32_t now);
@@ -221,7 +258,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

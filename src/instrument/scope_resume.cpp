@@ -3,7 +3,7 @@
 
 namespace openosc {
 bool DataAccess::resumeScope(const ScopeRequest &request) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) return false;
     if (!scopeHeld_) return configureScopeCore(request);
     // Keep the frozen record until the new acquisition has accepted its settings: with two slots

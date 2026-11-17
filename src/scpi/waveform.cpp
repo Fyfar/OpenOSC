@@ -20,6 +20,11 @@ bool Engine::waveformCommand(const Command &c) {
     } else if (match("WAVeform:SNAPshot")) {
         if (c.query || *c.argument) error(-108,c.query);
         else { backend_.releaseFrame(); preambleChannels_ = 0; }
+    } else if (match("WAVeform:KEY")) { // The leased record's full key: matched with DECode:RESult?.
+        char key[96];
+        if (!c.query) error(-109);
+        else if (!frame() || !backend_.frameKey(key, sizeof key)) error(-230, true);
+        else reply("%s", key);
     } else if (match("WAVeform:SEQuence") || match("WAVeform:TIMing")) {
         const auto *f = frame();
         if (!c.query) error(-109); else if (!f) error(-230,true);

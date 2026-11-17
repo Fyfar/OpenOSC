@@ -3,7 +3,7 @@
 
 namespace openosc {
 bool DataAccess::calibrate(uint32_t now,calibration::ZeroProcedure &procedure) {
-    releaseReadout(); // Revoked first: nothing waits for a background readout.
+    revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (!zeroOperation_.begin(now,procedure)) return false;
     counters_.stop();
     return true;

@@ -6,6 +6,7 @@
 #include "openosc/acquisition/interleave.hpp"
 #include "openosc/acquisition/capture.hpp"
 #include "openosc/acquisition/store.hpp"
+#include "openosc/acquisition/background_reader.hpp"
 #include "openosc/acquisition/request.hpp"
 #include "openosc/acquisition/rolling.hpp"
 #include "openosc/acquisition/arena.hpp"
@@ -81,6 +82,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const scope::FrameView *readoutFrame(uint32_t sequence);
     void releaseReadout();
     uint32_t readoutRevision() const { return readoutRevision_; }
+    // The protocol decoder's job keeps its own lease of the record on show (RUN Complete, HOLD): it is
+    // revoked with the readout's, before anything that needs that memory or a new capture.
+    void attachBackground(scope::BackgroundReader *reader) { background_ = reader; }
     uint32_t scopeReaders() const { return store_.readers(); }
     // For one-shot actions: the newest record may still be copying when a key arrives.
     bool acquireScopeWait(scope::FrameLease &lease, uint32_t timeoutMs = 120);
@@ -111,6 +115,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // accepted, and again once the running capture has waited TriggerWaitMs for an edge with its gate
     // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
+    // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
+    // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
     bool selectDmmFunction(dmm::Function function);
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
@@ -381,6 +387,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::TriggerCache triggerCache_;
     scope::FrameLease readout_;
     uint32_t readoutRevision_ = 0;
+    scope::BackgroundReader *background_ = nullptr; // The decoder's job (ITCM); its lease is its own.
+    void revokeBackground() { releaseReadout(); if (background_) background_->revoke(); }
     MeasurementMode measurement_ = MeasurementMode::Oscilloscope;
     DataStatus status_ = DataStatus::NoData;
     uint32_t holdReleases_ = 0;

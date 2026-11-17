@@ -21,6 +21,13 @@ void FrameLease::release() {
         view_ = {};
     }
 }
+bool FrameLease::share(FrameLease &out) const {
+    if (!owner_ || out.valid() || owner_->readers_ == UINT32_MAX) return false;
+    ++owner_->readers_;
+    out.view_ = view_;
+    out.owner_ = owner_;
+    return true;
+}
 bool FrameMailbox::begin() {
     CriticalSection guard;
     if (state() != State::Idle)

@@ -8,7 +8,6 @@ class Functions {
 public:
     static Function identify(const Result &result);
     static CommandGroup group(Function function);
-    static Function next(CommandGroup group, Function current);
     // The function has ranges the AUTO/RANGE key steps through (a Ranges table on both models): V, mV,
     // A, mA (DC and AC), resistance, capacitance. Diode, continuity, Unknown and any value past it
     // have none.

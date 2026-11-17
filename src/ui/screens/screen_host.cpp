@@ -69,6 +69,8 @@ void ScreenHost::build(lv_obj_t *parent, const Theme &theme) {
     dial_.create(root_);         // The dial first: the function sign is drawn over its empty corner.
     functionIcon_.create(root_);
     meterCards_.create(parameters_);
+    decodeTable_.create(root_); // Two objects for the decoder, hidden until it shows.
+    decodeStrip_.create(root_);
     waveform_.inlineScales(theme.layout == LayoutPreset::Legacy);
     waveform_.colors(theme);
     waveform_.configure(theme.plot);
@@ -86,6 +88,7 @@ void ScreenHost::activate(MeasurementMode mode) {
     functionIcon_.visible(false);
     dial_.visible(false);
     meterCards_.visible(false);
+    decodeTable_.hide(); decodeStrip_.hide(); // The Scope places them again (placeScope).
     const auto &theme = this->theme();
     // The body behind the blocks (the small gaps between them) in this screen's background.
     lv_obj_set_style_bg_color(root_, lv_color_hex(theme.background), 0);
@@ -128,6 +131,7 @@ void ScreenHost::paintScope() {
         waveform_.roles(scopeLook_->color(ScopeRole::Trigger), scopeLook_->color(ScopeRole::TagText), scopeLook_->color(ScopeRole::Readout));
     else waveform_.roles(plot::Palette::FollowSource, plot::Palette::Contrast, t.foreground);
     scopeFooter_.theme(t);
+    decodeTable_.colors(t); decodeStrip_.colors(t);
 }
 void ScreenHost::buttons(int y) {
     auto *bar = elements_.get(ElementId::Parameters);
@@ -150,6 +154,23 @@ void ScreenHost::placeScope() {
     const auto &keys = scopeSpans_[unsigned(ScopeBlock::Buttons)];
     auto *measurements = elements_.get(ElementId::Measurements), *waveform = elements_.get(ElementId::Waveform);
     const auto &w = t[unsigned(ElementId::Waveform)];
+    lv_obj_set_hidden(elements_.get(ElementId::Details), true); // Compact's scale line: the Scale and Position zones say it.
+    lv_obj_set_hidden(elements_.get(ElementId::Parameters), false);
+    if (decoderShown_ && decoderView_ != decoding::View::Annotations) { // The decoder's own layout (§4.2).
+        const bool split = decoderView_ == decoding::View::Split;
+        lv_obj_set_hidden(measurements, true);
+        if (split) {
+            lv_obj_set_pos(waveform, w.x, ScreenLayout::Top);
+            lv_obj_set_size(waveform, w.width, ScreenLayout::SplitWaveform);
+        }
+        lv_obj_set_hidden(waveform, !split);
+        decodeTable_.place(split ? ScreenLayout::Top + ScreenLayout::SplitWaveform : ScreenLayout::Top,
+                           split ? ScreenLayout::SplitTable : ScreenLayout::DecoderOnlyTable);
+        decodeStrip_.hide();
+        buttons(ScreenLayout::MenuKeysY);
+        return;
+    }
+    decodeTable_.hide();
     // The readouts row is the footer's: the full 320 px of its two panels (a theme's narrower box,
     // Legacy's x 10 / 300, would push the second channel's panel off the screen).
     lv_obj_set_pos(measurements, 0, readouts.y);
@@ -159,8 +180,15 @@ void ScreenHost::placeScope() {
     lv_obj_set_size(waveform, w.width, plot.height);
     lv_obj_set_hidden(waveform, false);
     buttons(keys.y);
-    lv_obj_set_hidden(elements_.get(ElementId::Parameters), false);
-    lv_obj_set_hidden(elements_.get(ElementId::Details), true); // Compact's scale line: the Scale and Position zones say it.
+    // Wave + annotations: the strip over the plot's bottom rows, in the plot's columns.
+    if (decoderShown_) decodeStrip_.place(w.x + plot::PlotFrame::Left, plot.bottom() + 1 - ScreenLayout::AnnotationStrip,
+                                          plot::PlotFrame::plotWidth(w.width), ScreenLayout::AnnotationStrip);
+    else decodeStrip_.hide();
+}
+void ScreenHost::decoder(bool shown, decoding::View view) {
+    if (shown == decoderShown_ && view == decoderView_) return;
+    decoderShown_ = shown; decoderView_ = view;
+    if (root_ && mode_ == MeasurementMode::Oscilloscope && !overlay_) placeScope();
 }
 void ScreenHost::generatorArrangement(const GeneratorArrangement &order) {
     if (!order.valid() || order == generatorOrder_) return;
@@ -203,6 +231,7 @@ void ScreenHost::overlay(bool parameters) {
         const auto id = ElementId(i);
         lv_obj_set_hidden(elements_.get(id), id != ElementId::Status && !(parameters && id == ElementId::Parameters));
     }
+    decodeTable_.hide(); decodeStrip_.hide();
     if (parameters) buttons(ScreenLayout::MenuKeysY); // Over a menu: the same bar, at the bottom over the keys.
 }
 } // namespace openosc::ui

@@ -1,4 +1,6 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/decode/table_text.hpp"
+#include "openosc/ui/scope/column_cache.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -33,7 +35,14 @@ void ApplicationController::refreshSoftKeys() {
         view_.softKeys(&view_.generatorKeys(generator));
         return;
     } else if (panel_ != Panel::None) keys = Keys::list(editing);
-    else { view_.softKeys(nullptr); return; }
+    else if (decoderScreen()) { // Plan §4.4: Protocol, View, Jump (HOLD only), back to the Scope or Detail back.
+        static constexpr const char *views[] = {"Wave+Ann", "Split", "Table"};
+        const auto &d = prefs_.scope.decoder;
+        keys.keys[0] = {"Proto", decoding::Protocols::name(d.protocol), true};
+        keys.keys[1] = {"View", views[unsigned(d.view) < 3 ? unsigned(d.view) : 0], true};
+        keys.keys[2] = {"Jump", data_.scopeHeld() ? "HOLD" : "HOLD only", data_.scopeHeld()};
+        keys.keys[3] = decoderDetail_ ? ui::SoftKey{"Back", "Table", true} : ui::SoftKey{"Scope", "", true};
+    } else { view_.softKeys(nullptr); return; }
     view_.softKeys(&keys);
 }
 // As imageKeys: F4 always (Back to the list, or out of it); F2 only in the preview (Full 1:1 or Fit);
@@ -50,6 +59,21 @@ void ApplicationController::meterHoldWord(char *output, size_t capacity) const {
     const auto &meter = data_.meter();
     if (meter.held()) { if (capacity) output[0] = 0; return; } // The manual or the DMM's own HOLD: "HOLD".
     meter.holdCycle().indicator(data_.nowUs(), output, capacity);
+}
+// While the display waits on DMA2D (RenderIdle, no LVGL): the newest frame not yet shown, looked
+// at without being taken, has its columns reduced into the ColumnCache the projection then uses.
+void ApplicationController::prepareColumns() {
+    if (!rendering_ || state_.mode != MeasurementMode::Oscilloscope || panel_ != Panel::None || state_.settingsOpen || !uiReady_ ||
+        data_.scopeHeld() || !view_.traceDrawn()) return;
+    const auto &model = view_.waveform().model();
+    if (!ahead_.valid()) {
+        if (!data_.acquireScope(ahead_, false)) return;
+    }
+    if (model.hasFrame() && ahead_.view().metadata().sequence == model.metadata().sequence) {
+        ahead_.release(); // Already shown: do not reduce it again or hold up publication of the next frame.
+        return;
+    }
+    plot::applicationColumns().prepare(ahead_.view(), model.options(), model.viewport().width, model.viewport().height);
 }
 void ApplicationController::displayData(uint32_t now) {
     refreshSoftKeys();
@@ -125,9 +149,21 @@ void ApplicationController::displayData(uint32_t now) {
             syncCursorFocus();
         }
         view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
-        if (!view_.waveformVisible()) { readouts_.suspend(data_); dataAt_=now; return; }
+        if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
+            // No projection and no readouts without a trace; the decoder still takes the record.
+            readouts_.suspend(data_); dataAt_=now;
+            if (prefs_.scope.decoder.enabled) feedDecoder();
+            showDecoder(now);
+            if (view_.overlayActive()) return;
+            if (dataRefresh_ || lastScopeStatus_ != data_.status() || lastScopeHold_ != data_.scopeHeld()) {
+                view_.captureStatus(data_.status(), data_.scopeHeld());
+                lastScopeStatus_ = data_.status(); lastScopeHold_ = data_.scopeHeld();
+            }
+            dataRefresh_ = false;
+            return;
+        }
         scope::FrameLease frame;
-        if (data_.acquireScope(frame)) {
+        if (scopeFrame(frame)) {
             const auto sequence = frame.view().metadata().sequence;
             if (dataRefresh_ || lastScopeSequence_ != sequence || lastScopeHold_ != data_.scopeHeld() ||
                 lastScopeStatus_ != data_.status() || view_.waveform().needsFrame()) {
@@ -143,6 +179,7 @@ void ApplicationController::displayData(uint32_t now) {
             view_.captureStatus(data_.status(), data_.scopeHeld());
             lastScopeStatus_ = data_.status();
         }
+        showDecoder(now); // After the trace took its record: the annotations and the table are of it.
         readouts_.service(data_, view_, state_.scope.measurements, now);
     } else if (state_.mode == MeasurementMode::Multimeter) {
         dataAt_ = now;

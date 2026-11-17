@@ -17,6 +17,16 @@ struct MeterHold {
     bool captured = false; // A snapshot is what meter() reports now.
     uint32_t captures = 0, remainingMs = 0;
 };
+// The protocol decoder as DECode: reports it (docs/SCPI.md): its switch, protocol and the published
+// result with its full record key, counters and Fs. Strings are static.
+struct DecodeReport {
+    bool enabled = false, result = false;
+    const char *protocol = "OFF", *status = "";
+    uint32_t events = 0, lost = 0, dropped = 0, overflows = 0, clipped = 0, processed = 0, samples = 0;
+    uint32_t generation = 0, sequence = 0, origin = 0, fingerprint = 0, settingsHash = 0, fsNumerator = 0, fsDenominator = 0;
+    uint32_t revision = 0;
+    uint64_t timestampUs = 0;
+};
 // Called only by the foreground dispatcher. A frame remains leased until releaseFrame().
 class Backend {
 public:
@@ -92,6 +102,22 @@ public:
     virtual int coreMhz(uint32_t) { return -241; }
     virtual bool counter(unsigned,scope::CounterReading &) const { return false; }
     virtual scope::CaptureProgress captureProgress() const { return {}; }
+    // DECode: (decoder builds). report: false when the build has no decoder. One CSV export at a time
+    // (DECode:DATA?): begin gives its ticket (0: `error` -200 busy, -230 no finished result), measure()
+    // its size (1 known, 0 not yet, -1 cancelled), read() its bytes (0 before the end: cancelled), end()
+    // lets it go; the engine keeps only the ticket. save(): DECode:SAVE (0 started, else the error);
+    // saved(): the last file, "BUSY" while one is written, or why the last one failed.
+    // WAV:KEY?: the full record key of the record frame() leased ("generation,sequence,timestamp_us,
+    // origin,samples,0xFINGERPRINT": every field of RecordKey, as DECode:RESult? has them), frozen when
+    // it was leased. False: none leased.
+    virtual bool frameKey(char *, size_t) const { return false; }
+    virtual bool decodeReport(DecodeReport &) const { return false; }
+    virtual uint32_t decodeExport(int16_t &error) { error = -113; return 0; }
+    virtual int decodeMeasure(uint32_t, uint32_t &) { return -1; }
+    virtual size_t decodeRead(uint32_t, uint8_t *, size_t) { return 0; }
+    virtual void decodeEnd(uint32_t) {}
+    virtual int16_t decodeSave() { return -113; }
+    virtual const char *decodeSaved() const { return ""; }
     virtual const char *serial() const = 0;
     virtual const char *version() const = 0;
 };

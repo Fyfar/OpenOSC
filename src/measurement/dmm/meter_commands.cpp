@@ -5,12 +5,29 @@ static_assert(KeyCommand::StrokeMs >= RangeStroke::QuietLimitMs + 2 * RangeStrok
               KeyCommand::StrokeMs >= RangeStroke::HoldGapMs + 3 * RangeStroke::StepLimitMs,
               "a stroke's command outlives the stroke's own bounds");
 bool MeterCommands::selectFunction(Function function, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
-    if (key_.busy() || range_.busy() || stroke_.active()) return false;
+    if (key_.busy() || range_.busy() || stroke_.active() || group_ == DataStatus::Busy || !fresh(latest)) return false;
     if (!selector_.request(function, latest, nowMs, minimumUs)) return false;
-    operation_ = Operation::Function; return true;
+    operation_ = Operation::Function; groupChosen_ = false; return true;
+}
+bool MeterCommands::pressGroup(CommandGroup group, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
+    if (busy() || !latest.sequence || latest.timestampUs < minimumUs) return false;
+    groupKey_ = group; group_ = DataStatus::Busy; groupSent_ = false; groupDeadline_ = nowMs + GroupMs;
+    operation_ = Operation::Group; groupChosen_ = true; return true;
+}
+void MeterCommands::serviceGroup(CommandPort &port, const Result &latest, uint32_t nowMs) {
+    const auto tx = port.txStatus();
+    const bool ended = groupSent_ && tx != DataStatus::Busy; // The pair's own end: left, or the UART's transmit timeout.
+    if (ended || int32_t(nowMs - groupDeadline_) >= 0) {
+        group_ = !ended ? DataStatus::Timeout : tx == DataStatus::Ok || tx == DataStatus::Timeout ? tx : DataStatus::HardwareError;
+        if (groupSent_) { fenced_ = true; fence_ = latest.sequence; } // Even a failed pair may have reached it.
+        return;
+    }
+    if (groupSent_ || tx == DataStatus::Busy) return; // A pair before it still leaving: sent after it.
+    if (port.send(groupKey_, nowMs)) groupSent_ = true;
+    else group_ = DataStatus::HardwareError;
 }
 bool MeterCommands::requestKey(KeyCommand::Action action, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
-    if (selector_.busy() || range_.busy() || stroke_.active()) return false;
+    if (selector_.busy() || range_.busy() || stroke_.active() || group_ == DataStatus::Busy || !fresh(latest)) return false;
     using Action = KeyCommand::Action;
     const bool range = action == Action::NextRange || action == Action::Auto || action == Action::Manual;
     if (range && !Ranges::selectable(Functions::identify(latest))) return false;
@@ -18,14 +35,15 @@ bool MeterCommands::requestKey(KeyCommand::Action action, const Result &latest, 
     operation_ = Operation::Key; physical_ = false; return true;
 }
 bool MeterCommands::setRange(unsigned index, const Result &latest, uint32_t nowMs, uint64_t minimumUs) {
-    if (selector_.busy() || key_.busy() || stroke_.active() || latest.timestampUs < minimumUs) return false;
+    if (selector_.busy() || key_.busy() || stroke_.active() || group_ == DataStatus::Busy || !fresh(latest) ||
+        latest.timestampUs < minimumUs) return false;
     if (!range_.request(index, latest, nowMs)) return false;
     operation_ = Operation::Range; return true;
 }
 bool MeterCommands::pressRange(const Result &latest, uint32_t nowMs, uint64_t nowUs, uint64_t minimumUs) {
-    const bool fresh = latest.sequence && latest.timestampUs >= minimumUs && nowUs >= latest.timestampUs &&
-                       nowUs - latest.timestampUs <= FreshUs;
-    if (!fresh || !Ranges::selectable(Functions::identify(latest))) return false;
+    const bool recent = latest.sequence && latest.timestampUs >= minimumUs && nowUs >= latest.timestampUs &&
+                        nowUs - latest.timestampUs <= FreshUs;
+    if (!recent || !fresh(latest) || !Ranges::selectable(Functions::identify(latest))) return false;
     if (operation_ == Operation::Key && physical_ && key_.busy() && !stroke_.active()) key_.cancel(); // Superseded.
     if (!idle() || !requestKey(KeyCommand::Action::NextRange, latest, nowMs, minimumUs)) return false;
     physical_ = true; ended_ = false;
@@ -38,12 +56,13 @@ bool MeterCommands::holdRange(uint32_t nowMs) {
     return true;
 }
 bool MeterCommands::close(uint32_t nowMs) {
-    selector_.cancel(); key_.cancel(); range_.cancel();
+    selector_.cancel(); key_.cancel(); range_.cancel(); cancelGroup();
     stroke_.close(nowMs);
     return !stroke_.active();
 }
 void MeterCommands::abandon() {
-    selector_.cancel(); key_.cancel(); range_.cancel(); stroke_.abandon();
+    selector_.cancel(); key_.cancel(); range_.cancel(); cancelGroup(); stroke_.abandon();
+    fenced_ = false; // The UART and its session end: the next packets are another session's.
 }
 void MeterCommands::cancelOwner() {
     if (operation_ == Operation::Key) key_.cancel();
@@ -58,6 +77,7 @@ bool MeterCommands::startStroke(CommandGroup command, uint32_t nowMs) {
 }
 void MeterCommands::service(CommandPort &port, const Result &latest, uint32_t nowMs) {
     if (stroke_.active()) { serviceStroke(port, latest, nowMs); return; } // Nothing else until its end left.
+    if (group_ == DataStatus::Busy) { serviceGroup(port, latest, nowMs); return; } // Nothing else is accepted meanwhile.
     CommandGroup command;
     if (selector_.poll(latest, nowMs, command) && port.txStatus() != DataStatus::Busy) {
         if (port.send(command, nowMs)) selector_.sent(latest.sequence, nowMs);

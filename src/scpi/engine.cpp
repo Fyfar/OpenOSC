@@ -16,14 +16,20 @@ bool Engine::endMessage(uint32_t now) {
     inputAt_ = now; inputPending_ = false; return true;
 }
 void Engine::abortInput() { parser_.reset(); inputPending_ = false; }
+void Engine::endDecode() {
+    if (decodeTicket_) backend_.decodeEnd(decodeTicket_);
+    decodeTicket_ = decodeTotal_ = decodeSent_ = 0;
+    decodeBinary_ = waitingDecode_ = false;
+}
 void Engine::discardOutput() {
     backend_.releaseFrame();
+    endDecode();
     responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = false;
     completion_ = Completion::None;
 }
 void Engine::reset() {
-    parser_.reset(); errors_.clear(); backend_.endSession();
+    parser_.reset(); errors_.clear(); backend_.endSession(); endDecode();
     responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = false;
     waitingWaveform_ = waitingGenerator_ = false;
@@ -32,7 +38,8 @@ void Engine::reset() {
     profileKnown_ = false;
 }
 size_t Engine::available() const {
-    return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + unsigned(suffix_);
+    return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
+           unsigned(suffix_);
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
@@ -48,8 +55,15 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
             output[used++] = uint8_t(code + 128); ++binaryAt_;
         }
     }
-    if (used < capacity && suffix_ && (!binary_ || binaryAt_ == binaryCount_)) {
-        output[used++] = '\n'; suffix_ = false; binary_ = false;
+    if (decodeBinary_ && used < capacity && responseAt_ == responseSize_) {
+        const size_t want = decodeTotal_ - decodeSent_ < capacity - used ? decodeTotal_ - decodeSent_ : capacity - used;
+        const size_t n = want ? backend_.decodeRead(decodeTicket_, output + used, want) : 0;
+        if (want && !n) { reset(); errors_.push(-230); return used; } // Cancelled (Off, a new source).
+        used += n; decodeSent_ += uint32_t(n);
+        if (decodeSent_ == decodeTotal_ && decodeTicket_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
+    }
+    if (used < capacity && suffix_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_)) {
+        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false;
     }
     if (!available()) responseSize_ = responseAt_ = 0;
     outputAt_ = now_; return used;
@@ -63,6 +77,17 @@ void Engine::poll(uint32_t now) {
     }
     if (available()) {
         if (uint32_t(now - outputAt_) >= 10000) { reset(); errors_.push(-410); }
+        return;
+    }
+    if (waitingDecode_) { // The CSV's size, a bounded slice a pass; then the definite block's header.
+        const int known = backend_.decodeMeasure(decodeTicket_, decodeTotal_);
+        if (!known && int32_t(now - deadline_) < 0) return;
+        waitingDecode_ = false;
+        if (known != 1) { endDecode(); error(-230, true); return; }
+        char count[16]; std::snprintf(count, sizeof count, "%lu", (unsigned long)decodeTotal_);
+        reply("#%u%s", unsigned(std::strlen(count)), count);
+        decodeSent_ = 0; decodeBinary_ = true;
+        if (!decodeTotal_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
         return;
     }
     if (waitingWaveform_) {
@@ -105,7 +130,7 @@ void Engine::dispatch(const Command &c) {
     usbtrace::mark(usbtrace::Tag::Command, head);
     if (c.error) { error(c.error, c.query); return; }
     if (c.query && *c.argument) { error(-108,true); return; }
-    if (common(c) || generatorCommand(c)) return;
+    if (common(c) || generatorCommand(c) || decodeCommand(c)) return;
     if (backend_.multimeter() ? meterCommand(c) : scopeCommand(c)) return;
     error(-113, c.query);
 }
