@@ -7,12 +7,13 @@
 namespace openosc::scope {
 TriggerGate *TriggerGate::active_=nullptr;
 namespace { constexpr uint32_t Lines=(1U<<0)|(1U<<15); }
-bool TriggerGate::prepare(const TriggerSettings &settings,Rational rate,uint32_t samples,uint32_t settleMs) {
-    if (!settings.valid() || samples<RecordDepth::Minimum || samples>RecordDepth::Maximum || phase_!=Phase::Idle || lease_.valid()) return false;
+bool TriggerGate::prepare(const TriggerSettings &settings,Rational rate,uint32_t samples,uint32_t settleMs,uint32_t slack) {
+    if (!settings.valid() || samples<RecordDepth::Minimum || samples>RecordDepth::Maximum || slack>samples ||
+        phase_!=Phase::Idle || lease_.valid()) return false;
     clock_=TimerClock::apb1();
     const uint32_t pre=uint64_t(samples-1)*settings.position/1000;
-    if (!TriggerDelayPlan::sampleTicks(pre,rate,clock_,preTicks_) ||
-        !TriggerDelayPlan::sampleTicks(samples-1-pre,rate,clock_,postTicks_) ||
+    if (!TriggerDelayPlan::sampleTicks(pre+slack,rate,clock_,preTicks_) ||
+        !TriggerDelayPlan::sampleTicks(samples-1-pre+slack,rate,clock_,postTicks_) ||
         !resources_.acquire(PeripheralResources::ScopeTrigger,lease_)) return false;
     preTicks_+=uint64_t(clock_)*settleMs/1000;
     settings_=settings;

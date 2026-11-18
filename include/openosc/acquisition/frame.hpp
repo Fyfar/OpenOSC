@@ -50,10 +50,16 @@ struct FrameMetadata {
     // A capture the trigger was forced on (TFOR): placed at the force point unless `triggered` (an
     // edge the settings ask for is in the data). Not part of any record or file format.
     bool forced = false;
+    // A triggered record whose edge is not at its configured pretrigger point (TriggerRecord::select:
+    // no edge the ring holds the whole record around): triggerIndex minus that point. The view places
+    // the edge where the pretrigger point is. Zero for every other record; not in any file format.
+    int32_t triggerShift = 0;
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     ChannelMetadata channels[2];
     bool valid() const;
+    // No trigger: not triggered, index and shift zero (the one reset of all three).
+    void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; }
 };
 // A FourBanks or InterleavedCh1 record in two parts (CaptureBuffer::split): each lane keeps its newest
 // ahbWords in the capture ring (bank i of the view, a power of two) and its older words in a history
@@ -89,7 +95,11 @@ public:
     bool signedCode(Channel channel, size_t index, int16_t &output) const;
     bool volts(Channel channel, size_t index, double &output) const;
     const FrameMetadata &metadata() const { return metadata_; }
+    // The trigger at `index` (none without `found`): a record annotated again with its own trigger
+    // keeps its triggerShift, any other trigger has none.
     FrameView withTrigger(bool found, uint32_t index) const;
+    // The trigger at `index`, `shift` points past the record's pretrigger point (FrameMetadata::triggerShift).
+    FrameView withShiftedTrigger(uint32_t index, int32_t shift) const;
     FrameView slice(uint32_t first,uint32_t count) const;
     const uint16_t *bank(unsigned index) const { return index < 4 ? banks_[index] : nullptr; }
     const SplitHistory &split() const { return split_; }

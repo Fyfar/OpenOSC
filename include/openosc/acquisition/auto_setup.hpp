@@ -19,6 +19,9 @@ private:
     bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable);
     // Edges of a channel within its band, and the period most of them agree on (if any).
     struct Periodicity { uint32_t edges=0; double hertz=0; bool coherent=false; };
+    // Edges without a period from this many on are noise or an aperiodic signal; fewer, a signal
+    // slower than the record (EdgeScanner logs a period from every edge after the first).
+    static constexpr uint32_t SlowEdges=4;
     static Periodicity periodicity(const FrameView &frame,Channel channel,const SignalBand &band);
     bool timing(const SignalBand &band,const Periodicity &raw,double sampleRate,uint32_t now,const CounterSnapshot *counters);
     // A timebase showing about three periods of `hertz`.

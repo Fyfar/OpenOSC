@@ -7,6 +7,8 @@
 #include "openosc/platform/usb_trace.hpp"
 #include "capture_lanes.hpp"
 #include "openosc/acquisition/history_schedule.hpp"
+#include "openosc/acquisition/sample_plan.hpp"
+#include "openosc/acquisition/trigger_record.hpp"
 #include <algorithm>
 
 extern "C" { __attribute__((used)) OpenoscCaptureFaults openosc_capture_faults{}; }
@@ -191,7 +193,11 @@ bool CaptureDma::start(FrameMetadata metadata, const FrontendSettings &settings,
     // the buffer exactly as it was (resumeScope relies on this to keep a 512 KiB HOLD record).
     // After an analog change the gate fills on until the front end has settled: every point of the
     // record, its pre-trigger part included, is then taken at the settings its metadata describes.
-    if (gated_ && !gate_.prepare(trigger_,metadata.samplesPerSecond,requestedSamples_,frontend_.unsettledMs(Board::milliseconds()))) {
+    // Slack on both sides of the event: the edge the record is cut at (TriggerRecord::select) need not
+    // be the crossing the comparator fired on.
+    slack_=gated_ ? TriggerRecord::slack(requestedSamples_,buffer.capacityPoints(),
+                                         SamplePlan::headroom(buffer,pointRate.numerator/pointRate.denominator)) : 0;
+    if (gated_ && !gate_.prepare(trigger_,metadata.samplesPerSecond,requestedSamples_,frontend_.unsettledMs(Board::milliseconds()),slack_)) {
         captureFault(1U << 18);
         mailbox_.cancel(); active_=nullptr; status_=DataStatus::HardwareError; return false;
     }

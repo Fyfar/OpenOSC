@@ -55,21 +55,28 @@ bool TriggerSearch::find(const FrameView &frame, const TriggerSettings &settings
     uint32_t distance = UINT32_MAX;
     return scan(frame, settings, 1, frame.metadata().samples - 1, 1, index, distance, true); // Stops at the first edge.
 }
-// The nearest edge to target over the whole record, found from the target outwards: windows of
-// radius 1024, 4096, ... until one holds an edge no farther than its radius (every closer index
-// was examined) or the window is the record. The result equals one pass over every index; its
-// cost follows the distance to the edge, and a full pass remains only to prove there is none.
+// The nearest edge to target among the edges at indices first..last (the whole record by default),
+// found from the target outwards: windows of radius 1024, 4096, ... clipped to first..last, until
+// one holds an edge no farther than its radius (every closer index was examined) or the window is
+// the whole range. The result equals one pass over every index of the range; its cost follows the
+// distance to the edge, and a full pass of the range remains only to prove there is none.
 bool TriggerSearch::nearest(const FrameView &frame, const TriggerSettings &settings, uint32_t target, uint32_t &index) {
+    return nearest(frame, settings, target, 1, UINT32_MAX, index);
+}
+bool TriggerSearch::nearest(const FrameView &frame, const TriggerSettings &settings, uint32_t target, uint32_t first,
+                            uint32_t last, uint32_t &index) {
     if (!settings.valid() || !frame.valid()) return false;
     const uint32_t samples = frame.metadata().samples;
     if (samples < 2) return false;
-    target = std::min(target, samples - 1);
+    first = std::max<uint32_t>(first, 1); last = std::min(last, samples - 1); // Edge i: samples i-1 -> i.
+    if (first > last) return false;
+    target = std::clamp(target, first, last);
     for (uint64_t radius = 1024;; radius *= 4) {
-        const uint32_t first = uint32_t(std::max<int64_t>(1, int64_t(target) - int64_t(radius)));
-        const uint32_t last = uint32_t(std::min<uint64_t>(samples - 1, target + radius));
+        const uint32_t from = uint32_t(std::max<int64_t>(first, int64_t(target) - int64_t(radius)));
+        const uint32_t to = uint32_t(std::min<uint64_t>(last, target + radius));
         uint32_t distance = UINT32_MAX, at = 0;
-        const bool found = scan(frame, settings, first, last, target, at, distance);
-        if ((found && distance <= radius) || (first == 1 && last == samples - 1)) {
+        const bool found = scan(frame, settings, from, to, target, at, distance);
+        if ((found && distance <= radius) || (from == first && to == last)) {
             if (found) index = at;
             return found;
         }

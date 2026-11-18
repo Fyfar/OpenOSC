@@ -28,12 +28,20 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     const unsigned row = navigator_.row();
     switch (row) {
     case Actions::Spectrum:
-        plotControls_.options=view_.waveform().options(); plotControls_.options.mode=plot::Mode::Spectrum;
+        plotControls_.options=view_.waveform().options();
         plotControls_.channel=plotControls_.enabled[selectedChannel_] ? selectedChannel_ : selectedChannel_^1;
-        plotControls_.options.spectrum.channel=plotControls_.channel;
-        plotControls_.options.cursors.channel=plotControls_.channel;
         plotControls_.open(plot::Controls::FftSource);
-        if (!applyDisplay(plot::Controls::Count, now)) return; // The FFT view at once; its fields follow.
+        // FFT and Y-T+FFT already show the spectrum: its fields are edited in that view, which and its
+        // FFT source stay as they are, and nothing is applied (GitHub #17); in FFT the panel's channel
+        // is its source, in Y-T+FFT the selected one. Y-T and X-Y become FFT at once, on the selected
+        // channel; its fields follow.
+        if (plotControls_.options.mode==plot::Mode::Spectrum) plotControls_.channel=plotControls_.options.spectrum.channel;
+        else if (plotControls_.options.mode!=plot::Mode::SpectrumOverlay) {
+            plotControls_.options.mode=plot::Mode::Spectrum;
+            plotControls_.options.spectrum.channel=plotControls_.channel;
+            plotControls_.options.cursors.channel=plotControls_.channel;
+            if (!applyDisplay(plot::Controls::Count, now)) return;
+        }
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), plotControls_.index(plot::Controls::FftSource)); return;
     case Actions::Measurements:
         measurementEditor_.begin(prefs_.scope.measurements);

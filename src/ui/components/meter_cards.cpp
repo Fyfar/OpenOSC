@@ -48,11 +48,17 @@ void MeterCards::draw(lv_event_t *event) {
     const unsigned count = self.signs(index, signs);
     lv_area_t area;
     lv_obj_get_coords(row, &area);
-    // The F2 diode stands for kind 5 and 7 alike (the beeper shows on the function row's sign).
+    // The F2 diode stands for kind 5 and 7 alike (the beeper shows on the function row's sign). On
+    // the selected card's accent fill the decoded sign is the fill's ink and the others that ink
+    // faded; on a grid card the palette's colours, the decoded one kept readable on the fill.
+    const uint32_t fill = self.bar_->fill(index), ink = ParameterBar::ink(fill);
+    const bool accented = self.bar_->accented(index);
+    const uint32_t lit = accented ? ink : ParameterBar::readable(self.highlight_, fill);
+    const uint32_t unlit = accented ? ParameterBar::faded(ink, fill) : self.muted_;
     int x = area.x1 + Inset;
     for (unsigned i = 0; i < count; ++i) {
-        const bool lit = signs[i] == self.active_ || (signs[i] == S::Diode && self.active_ == S::DiodeBeeper);
-        FunctionSymbols::draw(lv_event_get_layer(event), signs[i], x, area.y1, SignHeight, lv_color_hex(lit ? self.highlight_ : self.muted_));
+        const bool on = signs[i] == self.active_ || (signs[i] == S::Diode && self.active_ == S::DiodeBeeper);
+        FunctionSymbols::draw(lv_event_get_layer(event), signs[i], x, area.y1, SignHeight, lv_color_hex(on ? lit : unlit));
         x += FunctionSymbols::width(signs[i], SignHeight) + Gap;
     }
 }

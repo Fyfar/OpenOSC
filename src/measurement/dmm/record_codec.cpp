@@ -1,5 +1,6 @@
 #include "openosc/measurement/dmm/record_codec.hpp"
 #include "openosc/data/binary.hpp"
+#include "openosc/measurement/dmm/function.hpp"
 #include <cstring>
 
 namespace openosc::dmm {
@@ -35,7 +36,7 @@ bool RecordCodec::encode(const Result &r, uint8_t *output, size_t capacity) {
     bytes[0x5a] = r.currentInput;
     Binary::writeLe(bytes + 0x60, r.rawMagnitude, 4);
     bytes[0x65] = bytes[0x66] = r.packetHold;
-    bytes[0xaf] = r.range == RangeMode::Manual;
+    bytes[0xaf] = r.vfc; // The factory's VFC mark (payload[10].3); a manual range is +21 "MANU".
     bytes[0xac] = r.peerRelative;
     bytes[0xad] = r.decimals;
     std::memcpy(output, bytes, Bytes);
@@ -58,6 +59,7 @@ bool RecordCodec::decode(const uint8_t *in, size_t bytes, Result &output) {
     result.peerRelative = in[0xac] != 0;
     result.decimals = in[0xad] <= 4 ? in[0xad] : 255;
     result.currentInput = in[0x5a];
+    result.vfc = Functions::VfcModel && in[0xaf];
     result.trueRms = !std::strcmp(rms, "TRUE RMS");
     result.rawMagnitude = Binary::readLe(in + 0x60, 4);
     std::strcpy(result.unit, result.rawUnit);
@@ -68,7 +70,7 @@ bool RecordCodec::decode(const uint8_t *in, size_t bytes, Result &output) {
     if (!std::strcmp(result.unit, "M&"))
         std::strcpy(result.unit, "MOhm");
     Decoder::classify(result.mainText, result.rawUnit, Decoder::digits(result.mainText), result.primary);
-    // +21 "AUTO"/"MANU" (+AF the MANU bit): the packet's rule, so a manual range without either bit
+    // +21 "AUTO"/"MANU" (+AF payload[10].3, which the factory decodes as MANU and draws as VFC): the packet's rule, so a manual range without either bit
     // reads back as the packet that produced it.
     result.range = Decoder::range(!std::strcmp(range, "AUTO"), !std::strcmp(range, "MANU") || in[0xaf], result);
     if (result.trueRms) {

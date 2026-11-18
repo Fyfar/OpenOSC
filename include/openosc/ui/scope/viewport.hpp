@@ -14,7 +14,10 @@ struct Viewport {
     // A triggered record is placed by its own pretrigger: the trigger lies as far into the window as
     // it lies in the record (triggerIndex / (samples - 1)), so a window no longer than the record
     // stays within it. That fraction is the position the capture was made with; neither a saved view
-    // (theme.json) nor the next RUN's request can move it.
+    // (theme.json) nor the next RUN's request can move it. A shifted trigger (FrameMetadata::triggerShift:
+    // no edge the ring held the record around) is placed in a trigger-locked Time/SpectrumOverlay view
+    // as the record cut at its pretrigger point would be (panned and zoomed out too): its window
+    // reaches past the record by the shift. Unlocked, X-Y and FFT views keep the real record origin.
     bool calculate(const scope::FrameMetadata &frame, const Options &options, unsigned w, unsigned h);
     int64_t position(unsigned x) const;
     int sampleX(uint32_t index) const;
@@ -29,9 +32,10 @@ struct Viewport {
         return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height;
     }
 private:
-    // The window's Q16 length before the trigger: spanQ16 * triggerIndex / (samples - 1), exact
-    // (floor) without the 64-bit product, as quotient and remainder.
-    uint64_t pretrigger(const scope::FrameMetadata &m) const;
+    // The window's Q16 length before the trigger: spanQ16 * point / (samples - 1), exact (floor)
+    // without the 64-bit product, as quotient and remainder. The point is the trigger's index, or
+    // with `anchored` (a locked time view) the record's pretrigger point (index - triggerShift).
+    uint64_t pretrigger(const scope::FrameMetadata &m, bool anchored) const;
 };
 struct Axis {
     int32_t zeroQ8 = 0, codesPerDivisionQ8 = 8192;

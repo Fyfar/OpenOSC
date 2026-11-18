@@ -1,4 +1,5 @@
 #include "openosc/ui/components/parameter_bar.hpp"
+#include "openosc/settings/color_value.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -7,15 +8,39 @@ namespace openosc::ui {
 namespace {
 // LVGL invalidates on every style write, equal or not: only a colour that differs is written, so a
 // context or selection that did not change draws nothing.
-void border(lv_obj_t *object, uint32_t color) {
-    if (!lv_color_eq(lv_obj_get_style_border_color(object, LV_PART_MAIN), lv_color_hex(color)))
-        lv_obj_set_style_border_color(object, lv_color_hex(color), 0);
-}
-void ink(lv_obj_t *object, uint32_t color) {
+void textColor(lv_obj_t *object, uint32_t color) {
     if (!lv_color_eq(lv_obj_get_style_text_color(object, LV_PART_MAIN), lv_color_hex(color)))
         lv_obj_set_style_text_color(object, lv_color_hex(color), 0);
 }
+void fillColor(lv_obj_t *object, uint32_t color) {
+    if (!lv_color_eq(lv_obj_get_style_bg_color(object, LV_PART_MAIN), lv_color_hex(color)))
+        lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
+}
+void frame(lv_obj_t *object, int width) {
+    if (lv_obj_get_style_border_width(object, LV_PART_MAIN) != width) lv_obj_set_style_border_width(object, width, 0);
+}
+void underline(lv_obj_t *object, bool on) {
+    const auto decor = on ? LV_TEXT_DECOR_UNDERLINE : LV_TEXT_DECOR_NONE;
+    if (lv_obj_get_style_text_decor(object, LV_PART_MAIN) != decor) lv_obj_set_style_text_decor(object, decor, 0);
+}
+float luminance(uint32_t rgb) {
+    const float r = float(rgb >> 16 & 0xff) / 255, g = float(rgb >> 8 & 0xff) / 255, b = float(rgb & 0xff) / 255;
+    return .2126f * r * r + .7152f * g * g + .0722f * b * b; // sRGB decoded as gamma 2: no powf for a guard.
+}
 } // namespace
+float ParameterBar::contrast(uint32_t a, uint32_t b) {
+    const float la = luminance(a), lb = luminance(b);
+    return (std::max(la, lb) + .05f) / (std::min(la, lb) + .05f);
+}
+uint32_t ParameterBar::ink(uint32_t fill) {
+    return contrast(ColorContrast::Dark, fill) >= contrast(ColorContrast::Light, fill) ? ColorContrast::Dark : ColorContrast::Light;
+}
+uint32_t ParameterBar::readable(uint32_t color, uint32_t fill) {
+    return contrast(color, fill) >= MinimumContrast ? color : ink(fill);
+}
+uint32_t ParameterBar::faded(uint32_t ink, uint32_t fill) {
+    return lv_color_to_u32(lv_color_mix(lv_color_hex(ink), lv_color_hex(fill), 150)) & 0xffffff; // ~60 % ink.
+}
 lv_obj_t *ParameterBar::create(lv_obj_t *parent) {
     root_ = lv_obj_create(parent);
     lv_obj_remove_style_all(root_);
@@ -28,12 +53,18 @@ lv_obj_t *ParameterBar::create(lv_obj_t *parent) {
         lv_obj_remove_style_all(cards_[i]);
         lv_obj_set_scrollable(cards_[i], false);
         lv_obj_set_style_bg_opa(cards_[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(cards_[i], 1, 0);
+        lv_obj_set_style_border_width(cards_[i], 0, 0);
+        lv_obj_set_style_radius(cards_[i], Radius, 0);
         titles_[i] = Elements::label(cards_[i], "");
         values_[i] = Elements::label(cards_[i], "");
         lv_obj_set_style_text_font(titles_[i], Elements::font(12), 0);
         lv_obj_set_style_text_font(values_[i], Elements::font(12), 0);
     }
+    for (auto &t : tints_) t = Tint::Highlight;
+    bottom_ = false;
+    // On the bottom edge the cards reach Radius past the bar, so their lower corners fall outside
+    // the screen (the host's 320x240 clips them): square at the edge, round at the top.
+    lv_obj_set_overflow_visible(root_, true);
     lv_obj_add_event_cb(root_, resized, LV_EVENT_SIZE_CHANGED, this);
     lv_obj_set_size(root_, 304, 32);
     return root_;
@@ -47,7 +78,7 @@ void ParameterBar::arrange() {
         const int w = (int(i) + 1) * available / int(Count) - int(i) * available / int(Count);
         widths_[i] = w;
         lv_obj_set_pos(cards_[i], x, 0);
-        lv_obj_set_size(cards_[i], w, height);
+        lv_obj_set_size(cards_[i], w, height + (bottom_ ? Radius : 0));
         lv_obj_set_pos(titles_[i], 4, 1);
         lv_obj_set_size(titles_[i], std::max(1, w - 8), 14);
         const int line = lv_font_get_line_height(lv_obj_get_style_text_font(values_[i], LV_PART_MAIN));
@@ -76,11 +107,13 @@ void ParameterBar::palette(const Theme &theme, const ElementStyle &style) {
     foreground_ = theme.foreground;
     highlight_ = style.color;
     muted_ = theme.muted;
+    channels_[0] = theme.channel1; channels_[1] = theme.channel2;
+    neutral_ = theme.foreground;
     selectedText_ = customFont_ = false;
     if (screenSelected_ >= Count) screenSelected_ = 0;
     if (!context_) selected_ = screenSelected_;
     for (unsigned i = 0; i < Count; ++i) {
-        lv_obj_set_style_bg_color(cards_[i], lv_color_hex(background_), 0);
+        lv_obj_set_style_border_color(cards_[i], lv_color_hex(border_), 0); // An inert key's frame.
         lv_obj_set_style_text_font(values_[i], Elements::font(style.font), 0);
         lv_obj_set_style_text_font(titles_[i], Elements::font(12), 0);
     }
@@ -98,15 +131,46 @@ void ParameterBar::text(const lv_font_t *font, uint32_t color, bool selected) {
     paint();
     arrange();
 }
-// The layer on show: the accented card's border and value in the highlight, a marked title in the
-// highlight, an inert key's texts muted.
+uint32_t ParameterBar::accent(unsigned index) const {
+    switch (context_ ? Tint::Highlight : tints_[index]) {
+    case Tint::Channel1: return channels_[0];
+    case Tint::Channel2: return channels_[1];
+    case Tint::Neutral: return neutral_;
+    default: return highlight_;
+    }
+}
+// The layer on show. A live card is filled: the selected one with its accent, its texts in the ink
+// that contrasts with it (an explicit Card text colour where it stays readable there), a marked
+// title underlined; the others with the grid colour, the value in the text colour, the title muted
+// or, marked, in the highlight. An inert key: the panel inside the grid frame, its texts muted.
+// Only what changed is written: an unchanged state redraws nothing.
 void ParameterBar::paint() {
     for (unsigned i = 0; i < Count; ++i) {
-        const bool accent = i == selected_ && live_[i];
-        border(cards_[i], accent ? highlight_ : border_);
-        ink(values_[i], !live_[i] ? muted_ : accent && !selectedText_ ? highlight_ : foreground_);
-        ink(titles_[i], !context_ && screen_[i].marked ? highlight_ : muted_);
+        const bool live = live_[i], selected = accented(i), marked = !context_ && screen_[i].marked;
+        const uint32_t fill = !live ? background_ : selected ? accent(i) : border_;
+        fills_[i] = fill;
+        fillColor(cards_[i], fill);
+        frame(cards_[i], live ? 0 : 1);
+        const uint32_t on = ink(fill);
+        textColor(values_[i], !live ? readable(muted_, fill)
+                        : selected ? (selectedText_ && contrast(foreground_, fill) >= MinimumContrast ? foreground_ : on)
+                        : readable(foreground_, fill));
+        textColor(titles_[i], !live ? readable(muted_, fill) : selected ? on : readable(marked ? highlight_ : muted_, fill));
+        underline(titles_[i], selected && marked);
     }
+}
+void ParameterBar::tint(unsigned index, Tint tint) {
+    if (index >= Count || tints_[index] == tint) return;
+    tints_[index] = tint;
+    if (!context_ && index == selected_) paint();
+}
+void ParameterBar::untinted() {
+    for (unsigned i = 0; i < Count; ++i) tint(i, Tint::Highlight);
+}
+void ParameterBar::edge(bool bottom) {
+    if (bottom == bottom_) return;
+    bottom_ = bottom;
+    if (root_) arrange();
 }
 void ParameterBar::select(unsigned index) {
     screenSelected_ = index;

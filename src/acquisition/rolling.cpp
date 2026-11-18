@@ -59,8 +59,7 @@ FrameView RollingBuffer::snapshot() const {
     metadata.samples = size_;
     metadata.ring = capacity_;
     metadata.origin = (cursor_ + capacity_ - size_) % capacity_;
-    metadata.triggered = false;
-    metadata.triggerIndex = 0;
+    metadata.clearTrigger();
     const uint64_t ticks = uint64_t(size_) * metadata.samplesPerSecond.denominator;
     if (ticks > UINT64_MAX / 1000000)
         return {};

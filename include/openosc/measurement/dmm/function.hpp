@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/board/current.hpp"
 #include "openosc/measurement/dmm/session.hpp"
 
 namespace openosc::dmm {
@@ -8,6 +9,12 @@ class Functions {
 public:
     static Function identify(const Result &result);
     static CommandGroup group(Function function);
+    // The board whose V key has AC V.F.C. as its third position: the ZT706S (its 66000-count
+    // controller, as Ranges picks its tables). The ZT703S's F1 is DC/AC only: no VFC there.
+    static constexpr bool VfcModel = board::Current::Features.dmmCounts == board::DmmCounts::Counts66000;
+    // AC V.F.C. is shown: V AC with the VFC flag (Result::vfc). Not a function of its own: the
+    // factory selects, ranges and decodes it as V AC and only marks it.
+    static bool vfc(const Result &result) { return result.vfc && identify(result) == Function::VoltageAc; }
     // The function has ranges the AUTO/RANGE key steps through (a Ranges table on both models): V, mV,
     // A, mA (DC and AC), resistance, capacitance. Diode, continuity, Unknown and any value past it
     // have none.

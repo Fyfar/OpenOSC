@@ -241,11 +241,15 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     // The function as its sign; the row says only what the sign cannot: MEAN, RMS, the jacks.
     host_.functionIcon().show(function, result.kind == dmm::Kind::DiodeWithBeeper, look_.color(MeterRole::Function));
     reading(text);
+    // AC V.F.C. (the ZT706S's third F1 position) is V AC with its mark, as on the factory screen:
+    // "VFC" first on the sign row (digital) or on the dial's marking (analog: the meta row's right
+    // slot holds the AC frequency), and on the F1 card's value line.
+    const bool vfc = dmm::Functions::vfc(result);
     char details[64];
-    if (!analog_) std::snprintf(details, sizeof details, "%s%s%s", mean ? "MEAN  " : "", result.trueRms ? "RMS  " : "", terminals);
+    if (!analog_) std::snprintf(details, sizeof details, "%s%s%s%s", vfc ? "VFC  " : "", mean ? "MEAN  " : "", result.trueRms ? "RMS  " : "", terminals);
     else { // The meta row is the range's, its mode's and the AC frequency's; RMS and the jacks are the dial's marking.
-        char marking[24];
-        std::snprintf(marking, sizeof marking, "%s%s", result.trueRms ? "RMS " : "", terminals);
+        char marking[32];
+        std::snprintf(marking, sizeof marking, "%s%s%s", vfc ? "VFC " : "", result.trueRms ? "RMS " : "", terminals);
         host_.dial().marking(marking);
         details[0] = 0;
     }
@@ -256,7 +260,9 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     const auto group = dmm::Functions::group(function);
     const unsigned focus = function == dmm::Function::Unknown || unsigned(group) >= sizeof groups / sizeof *groups
                                ? ParameterBar::Count : groups[unsigned(group)];
-    cards(function, result.kind == dmm::Kind::DiodeWithBeeper, result.currentInput, focus, MeterText::unit(result.unit));
+    char value[24];
+    std::snprintf(value, sizeof value, "%s%s", MeterText::unit(result.unit), vfc ? " VFC" : "");
+    cards(function, result.kind == dmm::Kind::DiodeWithBeeper, result.currentInput, focus, value);
     elements.text(ElementId::Measurements, "");
     host_.meterSummary().visible(true);
     host_.meterTrend().visible(context.display == 2);

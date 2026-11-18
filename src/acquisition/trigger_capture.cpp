@@ -78,7 +78,7 @@ void CaptureDma::publishTriggered() {
     const uint64_t first=stopped_.first*k, end=stopped_.end*k, event=eventCursor_*k;
     auto metadata=metadata_;
     metadata.samples=uint32_t(end-first); metadata.origin=uint32_t(first%metadata.ring);
-    metadata.triggered=false; metadata.triggerIndex=0; metadata.forced=forced_;
+    metadata.clearTrigger(); metadata.forced=forced_;
     const double offset=double(first)*1000000/metadata.samplesPerSecond.value();
     if (!std::isfinite(offset) || offset>=double(UINT64_MAX-metadata.timestampUs)) {
         mailbox_.cancel(); status_=DataStatus::InvalidArgument; return;
@@ -94,7 +94,7 @@ void CaptureDma::publishTriggered() {
     // Trace: how late the freeze landed after the record the trigger asked for (bits 0-15, bit 31 when
     // early) and the ring points left before the record (bits 16-30): the stop headroom in use.
     const uint32_t pre=uint32_t(uint64_t(requestedSamples_-1)*trigger_.position/1000);
-    const uint64_t due=event+(requestedSamples_-1-pre);
+    const uint64_t due=event+(requestedSamples_-1-pre)+slack_;
     const uint64_t late=end>=due ? end-due : due-end;
     const uint32_t spare=(frame.metadata().origin+metadata.ring-metadata.origin)%metadata.ring;
     usbtrace::mark(usbtrace::Tag::CaptureStop, uint32_t(std::min<uint64_t>(late,0xffff)) | std::min<uint32_t>(spare,0x7fffU) << 16 |

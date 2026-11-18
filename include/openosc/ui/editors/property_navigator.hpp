@@ -4,7 +4,9 @@
 namespace openosc::ui {
 // The keys of every property list, one way (Settings, Scope, DMM and GEN panels):
 // Browse: Up/Down rows; MENU opens the row (a Choice list, a Number edit), switches a Toggle,
-//         runs an Action or opens a Page; Right opens only a Page; F4 and Left go back.
+//         runs an Action or opens a Page; Right opens a Page, and takes the next option of a Choice
+//         (the first after the last) or switches a Toggle, once per press (not on its auto-repeat);
+//         on a Number, Action or Info row Right does nothing; F4 and Left go back.
 // Choice: Up/Down move the draft in the list; MENU takes it; F4 and Left cancel.
 // Number: Left/Right and Up/Down step the value; MENU keeps it; F4 restores it.
 // One field at a time is committed: a Choice taken, a Toggle switched, a Number finished with MENU
@@ -26,6 +28,9 @@ public:
     };
     void reset(unsigned row = 0) { row_ = row; mode_ = Mode::Browse; draft_ = 0; saved_ = 0; }
     Outcome keys(uint32_t keys, PropertyList &list);
+    // Of the keys the next keys() call gets, those that are a held arrow's auto-repeat (KeyEvents::repeat);
+    // that call alone uses them. Never set: every key is a press.
+    void repeats(uint32_t keys) { repeated_ = keys; }
     // Leaves a list or number edit as if F4 were pressed (MODE, Remote, power off while a list is
     // open); true if a number was restored, which its owner then applies.
     bool cancel(PropertyList &list);
@@ -35,7 +40,9 @@ public:
 
 private:
     void restore(PropertyList &list) const;
+    Outcome next(PropertyList &list) const;
     unsigned row_ = 0, draft_ = 0;
+    uint32_t repeated_ = 0;
     int32_t saved_ = 0;
     Mode mode_ = Mode::Browse;
 };

@@ -18,6 +18,10 @@ struct Result {
     Kind kind = Kind::Unknown;
     RangeMode range = RangeMode::Unknown;
     bool trueRms = false, packetHold = false, currentInput = false, peerRelative = false;
+    // AC V.F.C., the ZT706S's third F1 position: payload[10].3, the factory record+AF that its
+    // dmm_update_display (706S 0803CDB0) and its F1 card (0803C31C) draw as "VFC". Set only on a
+    // board that has the position (Functions::VfcModel); the function stays V AC (Functions::vfc).
+    bool vfc = false;
     uint8_t decimals = 255; // 255: no known decimal-point layout.
     char mainText[16]{}, rawUnit[12]{}, unit[12]{}, secondaryText[20]{};
 };

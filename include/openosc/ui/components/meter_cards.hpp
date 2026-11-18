@@ -7,8 +7,9 @@
 namespace openosc::ui {
 // The DMM's F1..F4 cards as signs instead of words: each card's row shows every function its key
 // selects (F1 V DC/AC; F2 Ω, continuity, diode, capacitor; F3 A DC/AC; F4 mV or mA DC/AC, by the
-// input jack), the decoded function in the highlight colour, the others muted. The cards
-// themselves (border, focus, the value line) stay ParameterBar's, shared with Scope and GEN.
+// input jack), the decoded function in the highlight colour, the others muted (on the selected
+// card's accent fill: its ink, the others faded). The cards themselves (fill, focus, the value
+// line) stay ParameterBar's, shared with Scope and GEN.
 class MeterCards {
 public:
     static constexpr int SignHeight = 14, Inset = 4, Gap = 3, MaximumSigns = 4;

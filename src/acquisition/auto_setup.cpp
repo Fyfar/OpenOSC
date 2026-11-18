@@ -4,7 +4,11 @@
 namespace openosc::scope {
 void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now) {
     original_=trial_=request;
-    channel_=channel<2 && request.frontend.enabled[channel] ? channel : request.frontend.enabled[0] ? 0 : 1;
+    // The source: the trigger's own channel while it is enabled (the one the user triggers on, whatever
+    // channel the keys select now), else the selected one, else the enabled one.
+    const unsigned source=unsigned(request.trigger.channel);
+    channel_=source<2 && request.frontend.enabled[source] ? source
+           : channel<2 && request.frontend.enabled[channel] ? channel : request.frontend.enabled[0] ? 0 : 1;
     trial_.trigger.mode=TriggerMode::Auto;
     trial_.trigger.channel=Channel(channel_); trial_.trigger.edge=Edge::Rising; trial_.trigger.level=0;
     // Start independently of a previous20s/div or10ns/div window.
@@ -56,14 +60,17 @@ bool AutoSetup::observe(const FrameView &frame,uint32_t now,const CounterSnapsho
     SignalBands::measure(frame,bands);
     Periodicity periodic[2];
     for (unsigned c=0;c<2;++c) if ((usable&(1U<<c)) && bands[c].valid) periodic[c]=periodicity(frame,Channel(c),bands[c]);
-    // The source: the selected channel if usable, but a channel with a period is preferred to one
-    // without (noise or an ADC floor with transients beside a clean signal), and a channel with a
-    // span to a flat one.
+    // The source stays the trigger's channel while it is usable and has a signal. The other one is
+    // taken only for a flat source beside a channel with a span, or for edges without a period (noise,
+    // an ADC floor with transients) beside a periodic channel. A source with fewer edges than a period
+    // needs is a signal slower than this record, not noise: timing() widens the window for it, as a
+    // faster channel beside it must not take the trigger over.
     const unsigned previousChannel=channel_;
     if (!(usable&(1U<<channel_))) channel_=usable&1 ? 0 : 1;
     const unsigned other=channel_^1;
+    const auto noise=[&](unsigned c) { return !periodic[c].coherent && periodic[c].edges>=SlowEdges; };
     if ((usable&(1U<<other)) &&
-        ((periodic[other].coherent && !periodic[channel_].coherent) ||
+        ((periodic[other].coherent && noise(channel_)) ||
          (summaries[channel_].maximum-summaries[channel_].minimum<4 && summaries[other].maximum-summaries[other].minimum>=4)))
         channel_=other;
     trial_.trigger.channel=Channel(channel_);

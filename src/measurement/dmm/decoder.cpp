@@ -100,6 +100,7 @@ bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
     candidate.peerRelative = p[9] & 0x20;
     candidate.trueRms = p[10] & 0x40;
     candidate.packetHold = p[10] & 0x80;
+    candidate.vfc = Functions::VfcModel && (p[10] & 8); // Also the MANU bit of range() below, as the factory reads it.
     candidate.currentInput = p[15] & 1;
     struct Flag {
         unsigned byte;

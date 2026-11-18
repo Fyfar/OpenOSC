@@ -28,5 +28,8 @@ SECTIONS {
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 98304 < _estack, "Recovery RAM leaves less than 96 KiB stack")
     ASSERT(LOADADDR(.data) + SIZEOF(.data) <= ORIGIN(BOOT) + LENGTH(BOOT), "Recovery exceeds fixed 128 KiB reservation")
+    /* The image's own vector table (vectors.S) is taken before the code is copied: its handler
+       must lie in the image, not in the relocated CODE. */
+    ASSERT(Bootstrap_Fault >= ORIGIN(BOOT) && Bootstrap_Fault < LOADADDR(.text), "Bootstrap_Fault must lie in the image before the relocated code")
 }
 

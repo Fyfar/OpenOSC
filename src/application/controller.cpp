@@ -202,6 +202,9 @@ void ApplicationController::applyPreferences() {
 }
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
+    // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
+    // takes the next option on its press only.
+    navigator_.repeats(events.repeat & ~events.shortPress);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
     if (!(events.shortPress | events.longPress | events.repeat)) return;

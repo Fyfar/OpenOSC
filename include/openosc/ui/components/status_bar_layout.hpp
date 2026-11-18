@@ -17,6 +17,7 @@ struct StatusBarLayout {
     using Column = StatusColumn;
     static constexpr int Width = 320, Height = 20, Margin = 2, Gap = 3, Tight = 2;
     static constexpr int PillPadding = 4; // Each side of the state text.
+    static constexpr int PillRadius = 2;  // The RUN/HOLD pill's corners; the soft-key cards take the same.
     static constexpr Column BatteryIcon{Width - Margin - 15, 15}, BatteryText{Width - Margin - 32, 32};
     static constexpr int StatusX = Margin;
     // Record overview: the total points of the frame on show, then the map of that record.

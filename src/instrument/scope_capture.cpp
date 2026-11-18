@@ -216,7 +216,7 @@ bool DataAccess::describeNext(scope::FrameMetadata &metadata) {
     next.samplesPerSecond=rate; next.timebaseNs=request_.timebaseNs;
     next.layout=rolling ? scope::Layout::Linear : buffer.layout(); next.rolling=rolling;
     next.interleaveOffset=next.layout==scope::Layout::InterleavedCh1 ? interleaveOffset() : 0;
-    next.triggered=false; next.triggerIndex=0;
+    next.clearTrigger();
     describeChannels(next);
     if (!next.valid()) return false;
     metadata=next;

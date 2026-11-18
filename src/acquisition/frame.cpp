@@ -23,6 +23,9 @@ bool FrameMetadata::valid() const {
         return false; // Bound fixed-point projection arithmetic even for hostile imports.
     if ((rolling && (!timebaseNs || triggered)) || (triggered && triggerIndex >= samples))
         return false;
+    // The pretrigger point of a shifted trigger lies in the record.
+    if (triggerShift && (!triggered || int64_t(triggerIndex) - triggerShift < 0 || int64_t(triggerIndex) - triggerShift >= samples))
+        return false;
     // One channel through both ADCs, its points in pairs of a word; only it carries a correction.
     if (layout == Layout::InterleavedCh1 && (channels[1].enabled || ring % 2))
         return false;
@@ -443,9 +446,20 @@ bool FrameView::PairCursor::next(int16_t &ch1, int16_t &ch2) {
     return true;
 }
 FrameView FrameView::withTrigger(bool found, uint32_t index) const {
+    const bool same = found && metadata_.triggered && index == metadata_.triggerIndex;
     FrameView view = *this;
+    view.metadata_.clearTrigger();
     view.metadata_.triggered = found;
     view.metadata_.triggerIndex = found ? index : 0;
+    if (same) view.metadata_.triggerShift = metadata_.triggerShift;
+    view.valid_ = view.validate();
+    return view;
+}
+FrameView FrameView::withShiftedTrigger(uint32_t index, int32_t shift) const {
+    FrameView view = *this;
+    view.metadata_.triggered = true;
+    view.metadata_.triggerIndex = index;
+    view.metadata_.triggerShift = shift;
     view.valid_ = view.validate();
     return view;
 }

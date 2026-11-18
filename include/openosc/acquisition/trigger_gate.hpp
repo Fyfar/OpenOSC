@@ -18,7 +18,9 @@ public:
     // prepare() does everything that can fail (checks, delay plan, the TIM14/EXTI lease); begin()
     // then arms the prefill delay and cannot fail. start() is both, for callers with no DMA to order.
     // `settleMs` lengthens the prefill: no trigger, Auto timeout or force before it has passed.
-    bool prepare(const TriggerSettings &settings,Rational rate,uint32_t samples,uint32_t settleMs=0);
+    // `slack` points (TriggerRecord::slack) lengthen both the prefill and the post-trigger delay: the
+    // ring then holds them on each side of the event for the edge the record is cut at.
+    bool prepare(const TriggerSettings &settings,Rational rate,uint32_t samples,uint32_t settleMs=0,uint32_t slack=0);
     void begin(TriggerSink &sink);
     bool start(const TriggerSettings &settings,Rational rate,uint32_t samples,TriggerSink &sink) {
         if (!prepare(settings,rate,samples)) return false;

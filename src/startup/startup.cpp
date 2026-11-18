@@ -11,6 +11,7 @@ extern uint32_t _sidma_data, _sdma_data, _edma_data;
 extern uint64_t _sdecode_workspace, _edecode_workspace, _susb_trace, _eusb_trace;
 #endif
 void Reset_Handler();
+void Bootstrap_Fault();
 void Default_Handler();
 void HardFault_Handler();
 void SysTick_Handler();
@@ -19,7 +20,17 @@ int main();
 void __libc_init_array();
 void _init() {}
 __attribute__((aligned(1024))) uint32_t runtime_vectors[256];
-extern const uint32_t vectors[171];
+extern const uint32_t vectors[171]; // The runtime handlers (vectors.S), relocated with the code.
+// Every handler of image_vectors (vectors.S): only taken before Reset_Handler switches VTOR to
+// runtime_vectors, and only when the loader pointed VTOR at this image (our Handoff does; the factory
+// boot leaves its own). It lies in the image itself and calls nothing, so it never runs relocated
+// code that is not copied yet: a reset request; the IWDG ends it if the request does not.
+__attribute__((section(".bootstrap"), noinline, noreturn, used)) void Bootstrap_Fault() {
+    __DSB();
+    SCB->AIRCR = (0x5FAUL << SCB_AIRCR_VECTKEY_Pos) | (SCB->AIRCR & SCB_AIRCR_PRIGROUP_Msk) | SCB_AIRCR_SYSRESETREQ_Msk;
+    __DSB();
+    for (;;) {}
+}
 __attribute__((section(".bootstrap"), noinline, optimize("no-tree-loop-distribute-patterns")))
 void Reset_Handler() {
     __disable_irq();

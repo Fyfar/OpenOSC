@@ -107,6 +107,7 @@ private:
     static constexpr uint32_t StopRetryMs=50;
     uint32_t stopRetryAt_=0;
     uint32_t requestedSamples_=0;
+    uint32_t slack_=0; // Points the gate keeps on each side of the event (TriggerRecord::slack).
     uint64_t eventCursor_=0;
     bool edgeless_=false;
     uint32_t edgelessSequence_=0;

@@ -7,6 +7,7 @@ root = Path(env.subst("$PROJECT_DIR"))
 sys.path.insert(0, str(root / "scripts"))
 import board_config  # noqa: E402
 import generate_board_config  # noqa: E402
+import vector_table  # noqa: E402
 
 stale = generate_board_config.stale()
 if stale:
@@ -49,6 +50,7 @@ if image_kind == "application":
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         image = Path(str(target[0]))
+        vector_table.check(image.with_suffix(".elf"), image)
         output = image.with_name(module.image_name(board))
         marked = module.add_trailer(image.read_bytes(), board)
         image.write_bytes(marked)
@@ -61,6 +63,7 @@ elif image_kind == "recovery":
 
     def package_recovery(source, target, env):
         image = Path(str(target[0]))
+        vector_table.check(image.with_suffix(".elf"), image)
         model = bin_to_ztk.MODELS[str(board.model)]
         output = image.with_name(model.filename)
         container = bin_to_ztk.ZtkContainer.pack(image.read_bytes(), model)

@@ -60,7 +60,7 @@ void ScreenHost::build(lv_obj_t *parent, const Theme &theme) {
     lv_obj_set_style_pad_hor(pill, StatusBarLayout::PillPadding, 0);
     lv_obj_set_style_max_width(pill, StatusBarLayout::MaximumStatus, 0); // Clipped before the FPS column.
     lv_obj_set_style_pad_top(pill, 2, 0); // Centres the capitals on the bar's axis, y=10.
-    lv_obj_set_style_radius(pill, 2, 0);
+    lv_obj_set_style_radius(pill, StatusBarLayout::PillRadius, 0);
     lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
     tone_ = StatusTone(255);
     meterSummary_.create(elements_.get(ElementId::Measurements));
@@ -89,6 +89,7 @@ void ScreenHost::activate(MeasurementMode mode) {
     dial_.visible(false);
     meterCards_.visible(false);
     decodeTable_.hide(); decodeStrip_.hide(); // The Scope places them again (placeScope).
+    if (mode != MeasurementMode::Oscilloscope) parameters_.untinted(); // Channel colours are the Scope's cards' alone.
     const auto &theme = this->theme();
     // The body behind the blocks (the small gaps between them) in this screen's background.
     lv_obj_set_style_bg_color(root_, lv_color_hex(theme.background), 0);
@@ -137,6 +138,7 @@ void ScreenHost::buttons(int y) {
     auto *bar = elements_.get(ElementId::Parameters);
     lv_obj_set_pos(bar, ScreenLayout::ButtonsX, y);
     lv_obj_set_size(bar, ScreenLayout::ButtonsWidth, ScreenLayout::ButtonsHeight);
+    parameters_.edge(y + ScreenLayout::ButtonsHeight >= ScreenLayout::Bottom); // On the screen's bottom edge: square bottom corners.
 }
 void ScreenHost::scopeArrangement(const ScopeArrangement &order) {
     if (!order.valid() || order == scopeOrder_) return;

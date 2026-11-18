@@ -18,7 +18,10 @@ FrameView FrameView::slice(uint32_t first,uint32_t count) const {
     if (!wraps || !(metadata.ring&(metadata.ring-1))) metadata.origin%=metadata.ring;
     metadata.samples=count;
     if (metadata.triggered && metadata.triggerIndex>=first && metadata.triggerIndex-first<count) metadata.triggerIndex-=first;
-    else { metadata.triggered=false; metadata.triggerIndex=0; }
+    else metadata.clearTrigger();
+    // A shifted trigger keeps its pretrigger point only while that point stays in the slice.
+    const int64_t anchor=int64_t(metadata.triggerIndex)-metadata.triggerShift;
+    if (anchor<0 || anchor>=int64_t(count)) metadata.triggerShift=0;
     view.valid_=view.validate();
     return view;
 }

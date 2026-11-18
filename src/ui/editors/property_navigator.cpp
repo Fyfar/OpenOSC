@@ -9,7 +9,20 @@ bool PropertyNavigator::cancel(PropertyList &list) {
     mode_ = Mode::Browse;
     return number;
 }
+// The option after the current one, the first after the last (a Toggle: the other one); a value off
+// the list (a legacy one) goes to the first. One option only, or the list refuses it: nothing changes.
+PropertyNavigator::Outcome PropertyNavigator::next(PropertyList &list) const {
+    const unsigned current = list.option(row_);
+    if (list.kind(row_) == PropertyKind::Toggle) return list.choose(row_, current ? 0 : 1) ? Outcome::Changed : Outcome::Refused;
+    const unsigned options = list.options(row_);
+    if (!options) return Outcome::None;
+    const unsigned next = current < options ? (current + 1) % options : 0;
+    if (next == current) return Outcome::None;
+    return list.choose(row_, next) ? Outcome::Changed : Outcome::Refused;
+}
 PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &list) {
+    const uint32_t repeated = repeated_;
+    repeated_ = 0; // This call's only.
     const unsigned count = list.count();
     if (!keys || !count) return Outcome::None;
     if (row_ >= count) row_ = count - 1;
@@ -41,6 +54,8 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     if (keys & Keypad::Up) { row_ = (row_ + count - 1) % count; return Outcome::None; }
     if (keys & Keypad::Down) { row_ = (row_ + 1) % count; return Outcome::None; }
     if ((keys & Keypad::Right) && kind == PropertyKind::Page) return Outcome::Open;
+    if ((keys & Keypad::Right) && (kind == PropertyKind::Choice || kind == PropertyKind::Toggle))
+        return repeated & Keypad::Right ? Outcome::None : next(list); // One option per press, never on a held key.
     if (!(keys & Keypad::Menu)) return Outcome::None;
     switch (kind) {
     case PropertyKind::Choice:
@@ -49,7 +64,7 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         // is until an option is taken.
         mode_ = Mode::Choice; draft_ = list.option(row_) < list.options(row_) ? list.option(row_) : 0;
         return Outcome::None;
-    case PropertyKind::Toggle: return list.choose(row_, list.option(row_) ? 0 : 1) ? Outcome::Changed : Outcome::Refused;
+    case PropertyKind::Toggle: return next(list);
     case PropertyKind::Number: mode_ = Mode::Number; saved_ = list.number(row_); list.beginEdit(row_); return Outcome::None;
     case PropertyKind::Action: return Outcome::Activate;
     case PropertyKind::Page: return Outcome::Open;

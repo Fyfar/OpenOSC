@@ -93,6 +93,14 @@ void ScopeScreen::cards() {
         bar.item(3, "Cursor", plot::CursorControl::lineName(model.cursorFocus(), spectrum));
     else
         bar.item(3, "Analyze", widget.options().mode == plot::Mode::XY ? "XY" : spectrum ? "FFT" : widget.options().mode == plot::Mode::SpectrumOverlay ? "Y-T+FFT" : "Display");
+    // Selected, each card takes the colour of what it acts on (issue #21): F1 Scale and F2 Position
+    // the selected channel's, F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
+    using Tint = ParameterBar::Tint;
+    const auto channelTint = [](unsigned c) { return c == 0 ? Tint::Channel1 : c == 1 ? Tint::Channel2 : Tint::Neutral; };
+    bar.tint(0, channelTint(channel_));
+    bar.tint(1, channelTint(channel_));
+    bar.tint(2, channelTint(unsigned(model.triggerChannel())));
+    bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(unsigned(focus_));
     std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", channel_ + 1, plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     host_.elements().text(ElementId::Details, details);

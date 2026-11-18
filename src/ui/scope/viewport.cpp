@@ -18,21 +18,29 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     spanQ16 = std::max<uint64_t>(65536, fullSpan * o.zoomOut / o.zoom);
     if (o.zoomOut > 1) spanQ16 = std::min(spanQ16, record);
     if (timebase != m.timebaseNs) spanQ16 = std::min(spanQ16, MaximumHeldSpanQ16);
-    startQ16 = int64_t(m.samples - 1) * 65536 * o.pan / 1000;
+    // A trigger-locked time view of a shifted trigger (FrameMetadata::triggerShift) counts positions
+    // from the record as it would be cut at its pretrigger point: pan, the lock and the zoom-out
+    // bounds place it as an unshifted record, its missing part outside the record (RecordGaps). Any
+    // other view (unlocked, X-Y, FFT) keeps the real record's origin and the trigger's own fraction.
+    const bool anchored = o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay);
+    const int64_t origin = anchored ? int64_t(m.triggerShift) * 65536 : 0;
+    startQ16 = origin + int64_t(m.samples - 1) * 65536 * o.pan / 1000;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     if (o.lockTrigger && m.triggered)
-        startQ16 += int64_t(m.triggerIndex) * 65536 - int64_t(pretrigger(m));
+        startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(pretrigger(m, anchored));
     // Without a trigger, Auto still needs captured history on both sides of the initial
     // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
              (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay))
         startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
-    if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, 0, int64_t(record - spanQ16));
+    if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;
 }
-uint64_t Viewport::pretrigger(const scope::FrameMetadata &m) const {
+uint64_t Viewport::pretrigger(const scope::FrameMetadata &m, bool anchored) const {
     if (m.samples < 2) return 0;
-    const uint64_t last = m.samples - 1, index = std::min<uint64_t>(m.triggerIndex, last);
+    // The record's pretrigger point (anchored: where a shifted trigger should have been), else its trigger.
+    const int64_t anchor = int64_t(m.triggerIndex) - (anchored ? m.triggerShift : 0);
+    const uint64_t last = m.samples - 1, index = uint64_t(std::clamp<int64_t>(anchor, 0, int64_t(last)));
     return spanQ16 / last * index + spanQ16 % last * index / last;
 }
 void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &last) const {
