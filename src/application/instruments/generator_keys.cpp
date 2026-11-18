@@ -17,7 +17,8 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     auto settings = output.settings();
     uint64_t frequency = prefs_.generatorMillihertz;
     const uint64_t step = std::max<uint64_t>(1, frequency / 10);
-    const uint64_t maximum = Caps::maximumMillihertz(settings.shape, settings.level);
+    const uint32_t timerHz = output.snapshot().timerHz; // The DAC limits at the clock that runs.
+    const uint64_t maximum = Caps::maximumMillihertz(settings.shape, settings.level, timerHz);
     if (keys & Keypad::Right) frequency = std::min(maximum, frequency + step);
     if (keys & Keypad::Left) frequency = std::max(Caps::MinimumMillihertz, frequency > step ? frequency - step : 1);
     settings.frequencyHz = generator::Frequency::rational(frequency);
@@ -28,7 +29,7 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
         if (Caps::Levels) {
             settings.level = generator::Level((unsigned(settings.level) + ((keys & Keypad::Up) ? 1 : 3)) % 4);
             settings.frequencyHz = generator::Frequency::rational(
-                std::min(frequency, Caps::maximumMillihertz(settings.shape, settings.level)));
+                std::min(frequency, Caps::maximumMillihertz(settings.shape, settings.level, timerHz)));
         } else { // The module's amplitude, 0.1 V steps up to the shape's limit at this frequency.
             const int top = Caps::amplitudeLimitMillivolts(settings.shape, frequency);
             const int next = int(settings.amplitudeMillivolts) + ((keys & Keypad::Up) ? 1 : -1) * Caps::AmplitudeStepMillivolts;

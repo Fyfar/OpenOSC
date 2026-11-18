@@ -121,11 +121,24 @@ bool Output::apply() {
     status_ = DataStatus::Ok;
     return true;
 }
+uint32_t Output::timerHz() { return TimerClock::apb1(); }
+void Output::stopped(OutputFault fault) {
+    fault_ = fault;
+    ++faults_;
+}
 bool Output::enable() {
     if (enabled_)
         return true;
-    if (!configured_ && !configure(settings_))
+    if (!configured_ && !configure(settings_)) {
+        // Only a setting kept from another clock (a run-mode change, the boot's restore) gets here:
+        // configure() refuses a new one before it is kept.
+        OutputPlan probe;
+        if (settings_.valid() && !OutputPlan::calculate(settings_, TimerClock::apb1(), probe)) {
+            status_ = DataStatus::Unsupported;
+            stopped(OutputFault::Limit);
+        }
         return false;
+    }
     if (!lease_.valid() && !resources_.acquire(PeripheralResources::GeneratorDma|PeripheralResources::OutputJack, lease_)) {
         status_ = DataStatus::Busy;
         return false;
@@ -148,12 +161,17 @@ void Output::disable() {
     }
     status_ = DataStatus::Ok;
 }
+// A DAC underrun stops the DMA requests for good (the stream must be set up again), a BDMA transfer
+// error stops the channel: the output is halted, OFF, HardwareError, and the stop counted once
+// (faults(): the UI's toast, SCPI's -240). Never restarted here: the same rate would underrun again.
 void Output::service() {
     if (enabled_ && !plan_.pwm && ((BDMA2->ISR & BDMA_FLAG_TE0) || (DAC2->SR & DAC_SR_DMAUDR1))) {
+        const auto fault = (BDMA2->ISR & BDMA_FLAG_TE0) ? OutputFault::Transfer : OutputFault::Underrun;
         if (!halt())
             return;
         lease_.release();
         status_ = DataStatus::HardwareError;
+        stopped(fault);
     }
 }
 } // namespace openosc::generator

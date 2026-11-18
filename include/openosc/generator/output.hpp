@@ -22,6 +22,7 @@ public:
     void service();
     // After a core clock change, with the output disabled: the timer plan is computed again from
     // the new APB1 timer clock for the same settings, and the output enabled again if `enable`.
+    // A setting with no plan at the new clock (above its DAC limit) stays off with fault Limit.
     bool retime(bool enable) { configured_ = false; return !enable || this->enable(); }
     // A run-mode change: TIM6/TIM13 run from PLL1, so the output stops and retime() plans it again.
     bool suspendForClock() { disable(); return !enabled_; }
@@ -38,12 +39,15 @@ public:
     DataStatus status() const { return status_; }
     const Settings &settings() const { return settings_; }
     const OutputPlan &plan() const { return plan_; }
-    Snapshot snapshot() const { return {settings_, plan_, status_, enabled_}; }
+    // `timerHz`: the APB1 timer clock TIM6 runs at now, which the DAC limits follow (DacCapabilities).
+    Snapshot snapshot() const { return {settings_, plan_, status_, enabled_, timerHz(), faults_, fault_}; }
+    static uint32_t timerHz();
 
 private:
     bool apply();
     bool halt();
     void releaseStopped();
+    void stopped(OutputFault fault); // A stop the output made by itself: counted, for one report each.
     PeripheralResources &resources_;
     BusClient *client_ = nullptr;
     PeripheralLease lease_;
@@ -52,5 +56,7 @@ private:
     unsigned activeBank_ = 0;
     bool configured_ = false, enabled_ = false;
     DataStatus status_ = DataStatus::NoData;
+    uint32_t faults_ = 0;
+    OutputFault fault_ = OutputFault::None;
 };
 } // namespace openosc::generator

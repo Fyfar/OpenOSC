@@ -16,7 +16,8 @@ struct ModuleCapabilities {
     static constexpr uint64_t MinimumMillihertz = 1000;
     static constexpr uint16_t MinimumDutyPermille = ModuleWave::MinimumDuty * 10, MaximumDutyPermille = ModuleWave::MaximumDuty * 10,
                               DutyStepPermille = 10, AmplitudeStepMillivolts = 100;
-    static uint64_t maximumMillihertz(Shape shape, Level = Level::Dedicated) {
+    // No DAC stream: the module's limits at any core clock (`timerHz` is the DAC's, never used here).
+    static uint64_t maximumMillihertz(Shape shape, Level = Level::Dedicated, uint32_t = 0) {
         return shape == Shape::Sine ? 10000000000ULL : shape == Shape::Sawtooth ? 200000000ULL : 2000000000ULL;
     }
     static bool duty(Shape shape) { return shape == Shape::Square; }
@@ -25,7 +26,7 @@ struct ModuleCapabilities {
     // nothing clamped silently. A shape whose limit is below the frequency or amplitude already set
     // is refused (the UI editors clamp first and say so), and a square whose duty no sample count at
     // this frequency holds (1 % needs 50 samples or more).
-    static bool accepts(const Settings &s) {
+    static bool accepts(const Settings &s, uint32_t = 0) {
         const uint64_t millihertz = Frequency::millihertz(s.frequencyHz);
         return s.valid() && millihertz >= MinimumMillihertz && millihertz <= maximumMillihertz(s.shape) &&
                s.dutyPermille >= MinimumDutyPermille && s.dutyPermille <= MaximumDutyPermille &&

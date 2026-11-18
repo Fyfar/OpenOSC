@@ -26,7 +26,8 @@ bool Engine::generatorCommand(const Command &c) {
     // Level profiles and DAC codes are the ZT703S DAC's; a volt amplitude is the ZT706S module's.
     if (((level || low || high || drive || path) && !Caps::Levels) || (amplitude && !Caps::Amplitude)) { error(-241, c.query); return true; }
     if (path && !c.query) { error(-113); return true; } // PATH is a query only.
-    auto settings = backend_.generator().requested;
+    const auto snapshot = backend_.generator();
+    auto settings = snapshot.requested;
     if (c.query) {
         if (output) reply("%u", backend_.generator().enabled);
         else if (frequency) number(settings.frequencyHz.value());
@@ -68,7 +69,7 @@ bool Engine::generatorCommand(const Command &c) {
     } else if (frequency) {
         double value; if (!argument(c, value, Header::Unit::Frequency)) return true;
         const double millihertz = std::round(value * 1000);
-        if (!(millihertz >= double(Caps::MinimumMillihertz)) || millihertz > double(Caps::maximumMillihertz(settings.shape,settings.level))) {
+        if (!(millihertz >= double(Caps::MinimumMillihertz)) || millihertz > double(Caps::maximumMillihertz(settings.shape,settings.level,snapshot.timerHz))) {
             error(-222); return true;
         }
         settings.frequencyHz = generator::Frequency::rational(uint64_t(millihertz));
@@ -88,7 +89,7 @@ bool Engine::generatorCommand(const Command &c) {
     }
     // The shape, frequency and amplitude together (e.g. 10 MHz sine to triangle: 2 MHz): a conflict
     // with what is set is refused, nothing changes.
-    if (!Caps::accepts(settings)) { error(-221); return true; }
+    if (!Caps::accepts(settings, snapshot.timerHz)) { error(-221); return true; } // At the clock that runs (DAC limit).
     if (!backend_.configureGenerator(settings)) error(-222);
     else waitGenerator();
     return true;

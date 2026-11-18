@@ -36,6 +36,7 @@ void Engine::reset() {
     completion_ = Completion::None;
     waveStart_ = 1; waveStop_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
     profileKnown_ = false;
+    generatorFaultsKnown_ = false; // A new session reports only the generator's stops from now on.
 }
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
@@ -72,6 +73,11 @@ void Engine::poll(uint32_t now) {
     now_ = now;
     if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
     profile_ = backend_.multimeter(); profileKnown_ = true;
+    // A stop the generator made by itself (DAC underrun, a setting above the clock's limit): -240 once
+    // when the count moved (at most one a poll, never repeated for a stop already reported).
+    const uint32_t faults = backend_.generator().faults;
+    if (generatorFaultsKnown_ && faults != generatorFaults_) errors_.push(-240);
+    generatorFaults_ = faults; generatorFaultsKnown_ = true;
     if (inputPending_ && uint32_t(now - inputAt_) >= 3000) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }

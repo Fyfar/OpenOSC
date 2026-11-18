@@ -6,19 +6,20 @@
 
 namespace openosc::generator {
 namespace {
+using Dac = DacCapabilities;
 unsigned dacPoints(const Settings &settings,uint32_t clock) {
     const double frequency=settings.frequencyHz.value();
-    unsigned upper=frequency<=DacCapabilities::DacSamplesPerSecond/1024.0 ? 1024 :
-        unsigned(DacCapabilities::DacSamplesPerSecond/frequency);
+    const uint32_t minimum=Dac::minimumDivider(clock);
+    const double rate=double(clock)/minimum; // The fastest update at this clock.
+    unsigned upper=frequency<=rate/Dac::MaximumPoints ? Dac::MaximumPoints : unsigned(rate/frequency);
     if (settings.shape==Shape::Triangle) upper &= ~1U;
-    if (upper<28) return 0;
+    if (upper<Dac::MinimumPoints) return 0;
     unsigned selected=upper;
     // Compare count/divider pairs before the full PSC/ARR search. At low rates
     // timer quantization is already tiny; one full TimerPlan search suffices.
     if (clock/(frequency*upper)<=65536) {
         double best=std::numeric_limits<double>::infinity();
-        const uint32_t minimum=(uint64_t(clock)+DacCapabilities::DacSamplesPerSecond-1)/DacCapabilities::DacSamplesPerSecond;
-        for (unsigned count=upper; count>=28; --count) {
+        for (unsigned count=upper; count>=Dac::MinimumPoints; --count) {
             if (settings.shape==Shape::Triangle && (count&1)) continue;
             const long divider=std::lround(clock/(frequency*count));
             if (divider<long(minimum) || divider>65536) continue;
@@ -91,7 +92,7 @@ bool WaveTable::build(const Settings &settings, uint16_t *samples, size_t count)
     return true;
 }
 bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan &output) {
-    if (!clock || !settings.valid() || settings.frequencyHz.value()*1000>DacCapabilities::maximumMillihertz(settings.shape,settings.level))
+    if (!clock || !settings.valid() || settings.frequencyHz.value()*1000>DacCapabilities::maximumMillihertz(settings.shape,settings.level,clock))
         return false;
     OutputPlan candidate;
     candidate.pwm = Levels::pwm(settings);
@@ -117,7 +118,7 @@ bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan 
         denominator /= common;
         if (numerator > UINT32_MAX || denominator > UINT32_MAX ||
             !TimerPlan::calculate(clock, {uint32_t(numerator), uint32_t(denominator)}, candidate.timer,
-                (uint64_t(clock)+DacCapabilities::DacSamplesPerSecond-1)/DacCapabilities::DacSamplesPerSecond))
+                Dac::minimumDivider(clock)))
             return false;
         numerator = candidate.timer.actualHz.numerator;
         denominator = uint64_t(candidate.timer.actualHz.denominator) * candidate.count;

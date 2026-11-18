@@ -6,6 +6,7 @@
 #ifdef OPENOSC_APPLICATION
 #include "openosc/board/current.hpp"
 #include "openosc/platform/input_service.hpp"
+#include "openosc/platform/usb_core.hpp"
 #endif
 uint32_t SystemCoreClock = 64000000U;
 uint32_t SystemD2Clock = 64000000U;
@@ -49,6 +50,10 @@ bool Board::initialize() {
         generatorPin = {}; generatorPin.Pin=GPIO_PIN_6; generatorPin.Mode=GPIO_MODE_ANALOG;
         HAL_GPIO_Init(GPIOA,&generatorPin);
     }
+    // Factory/Recovery may hand over a running OTG1 core with D+ pulled up; a boot on a profile
+    // without USB data (ClockPolicy) or with the USB controller disabled in Settings never starts
+    // its own. Once, before any USB attach (Registers only: usbPcd is not set up yet).
+    UsbCore::powerOff();
 #endif
     LTDC->GCR &= ~LTDC_GCR_LTDCEN;
     HAL_Init();

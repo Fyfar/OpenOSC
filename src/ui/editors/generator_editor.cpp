@@ -75,7 +75,7 @@ void GeneratorEditor::optionName(unsigned index, unsigned option, char *output, 
     }
 }
 void GeneratorEditor::limit() {
-    const uint64_t maximum = Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level);
+    const uint64_t maximum = Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level, timerHz_);
     if (generator::Frequency::millihertz(draft_.settings.frequencyHz) > maximum) {
         draft_.settings.frequencyHz = generator::Frequency::rational(maximum); draft_.clamped = true;
     }
@@ -167,7 +167,7 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
         return;
     case Row::Frequency:
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", requested, sizeof requested);
-        plot::Format::quantity(Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level) / 1000.0, "Hz", maximum, sizeof maximum);
+        plot::Format::quantity(Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level, timerHz_) / 1000.0, "Hz", maximum, sizeof maximum);
         std::snprintf(output, capacity, "%s (max %s)", requested, maximum);
         return;
     default: PropertyList::value(index, output, capacity); return;

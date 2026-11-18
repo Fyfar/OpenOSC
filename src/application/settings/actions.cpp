@@ -77,7 +77,8 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         confirmOperation(ui::Confirmation("CLEAR SCREENSHOTS?","Delete all BMP images"),&ApplicationController::clearImages);
         break;
     case ui::SettingsAction::UsbRemote:
-        if (!setRemote(true)) view_.notify("Finish active operations first",now);
+        if (!prefs_.usbController) view_.notify("Enable USB controller first", now); // No link to be remote over.
+        else if (!setRemote(true)) view_.notify("Finish active operations first",now);
         break;
     case ui::SettingsAction::Close: closeSettings(); break;
     default: break;

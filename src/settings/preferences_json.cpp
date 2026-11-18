@@ -17,6 +17,8 @@ constexpr const char *generatorDrives[] = {"factory","pwm"};
 // Startup output (GeneratorStartup); absent in older files: off.
 constexpr const char *generatorStartups[] = {"off","restore"};
 constexpr const char *batteryDisplays[] = {"icon","volts","percent"};
+// usb.controller (Preferences::usbController, the index); absent in older files: enabled.
+constexpr const char *usbControllers[] = {"disabled","enabled"};
 template<class T> bool number(JsonObjectConst object, const char *key, T &value) {
     if (!object.containsKey(key))
         return true;
@@ -37,7 +39,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         return false;
     JsonObjectConst root = lease->as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>() != 1 || !section(root, "display") ||
-        !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator"))
+        !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator") || !section(root, "usb"))
         return false;
     Preferences candidate;
     if (!number(root["display"], "brightness", candidate.brightness) ||
@@ -56,6 +58,14 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         while (index < 3 && std::strcmp(name, batteryDisplays[index])) ++index;
         if (index == 3) return false;
         candidate.batteryDisplay = index;
+    }
+    const auto usb = root["usb"].as<JsonObjectConst>();
+    if (usb.containsKey("controller")) {
+        const char *name = usb["controller"].is<const char *>() ? usb["controller"].as<const char *>() : "";
+        unsigned index = 0;
+        while (index < 2 && std::strcmp(name, usbControllers[index])) ++index;
+        if (index == 2) return false;
+        candidate.usbController = index;
     }
     const auto timing = root["scope"].as<JsonObjectConst>();
     if (timing.containsKey("timebase_ns")) {
@@ -170,6 +180,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["theme"] = values.useBuiltinTheme ? "builtin" : "custom";
     document["display"]["show_fps"] = bool(values.showFps);
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
+    document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;
     auto channels = document["scope"].createNestedArray("millivolts_per_division");
     channels.add(values.millivolts[0]);

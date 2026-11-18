@@ -2,6 +2,7 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/dma_stream.hpp"
 #include "openosc/platform/interrupts.hpp"
+#include <cstdint>
 
 namespace openosc::dmm {
 UartDma *UartDma::active_ = nullptr;
@@ -53,8 +54,8 @@ bool UartDma::start() {
     }
     DMA1->LIFCR = 0x3d;
     DMAMUX1_Channel0->CCR = DMA_REQUEST_UART5_RX;
-    DMA1_Stream0->PAR = reinterpret_cast<uint32_t>(&UART5->RDR);
-    DMA1_Stream0->M0AR = reinterpret_cast<uint32_t>(receiveBuffer);
+    DMA1_Stream0->PAR = uint32_t(reinterpret_cast<uintptr_t>(&UART5->RDR));
+    DMA1_Stream0->M0AR = uint32_t(reinterpret_cast<uintptr_t>(receiveBuffer));
     DMA1_Stream0->NDTR = 64;
     DMA1_Stream0->FCR = DMA_SxFCR_FEIE;
     DMA1_Stream0->CR = DmaStream::UartProtocol | (1U << 16) | DMA_SxCR_MINC | DMA_SxCR_CIRC | DMA_SxCR_TCIE | DMA_SxCR_HTIE |
@@ -170,15 +171,25 @@ void UartDma::uartInterrupt() {
     if (active_)
         active_->interrupt();
 }
+// Stream 0's error flags as the vendor HAL treats them (HAL_DMA_IRQHandler, stm32h7xx_hal_dma.c): a
+// FIFO error (FEIF0) or direct mode error (DMEIF0) is recorded and cleared and the stream runs on;
+// only a transfer error (TEIF0) ends it. So FEIF/DMEIF on a running stream is a lost byte, counted
+// as a UART line error is (DataAccess resets the packet framer): the link and its commands stay up
+// (issue #23: it was HardwareError for good, every later command refused). TEIF, or a stream that
+// no longer runs, is HardwareError until the UART is started again (DataAccess::activate, a clock
+// change); it never restarts itself.
 void UartDma::dmaInterrupt() {
     if (!active_)
         return;
+    static constexpr uint32_t Fifo = 1U << 0, DirectMode = 1U << 2, Transfer = 1U << 3;
     const uint32_t flags = DMA1->LISR;
     DMA1->LIFCR = 0x3d;
-    if (flags & 0x0d) {
+    if (flags & (Fifo | DirectMode | Transfer)) {
         ++active_->errors_;
-        active_->status_ = DataStatus::HardwareError;
-        return;
+        if ((flags & Transfer) || !(DMA1_Stream0->CR & DMA_SxCR_EN)) {
+            active_->status_ = DataStatus::HardwareError;
+            return;
+        }
     }
     active_->receive();
 }

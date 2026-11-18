@@ -2,6 +2,7 @@
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/power.hpp"
+#include "openosc/usb/instrument_usb.hpp"
 
 namespace openosc {
 ui::SettingsProperties ApplicationController::settingsRows() const {
@@ -88,6 +89,11 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
         auto request = data_.scopeRequest();
         request.recordPoints = chosen.scope.recordPoints;
         if (!applyEdited(request, now)) view_.notify("Finish data transfer first", now);
+    }
+    if (chosen.usbController != prefs_.usbController) { // At once: off stops the controller, on attaches it.
+        prefs_.usbController = chosen.usbController;
+        if (usb_) usb_->enable(prefs_.usbController != 0, now);
+        view_.notify(prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
     if (chosen.showFps != prefs_.showFps) fpsAt_ = now - 1000; // Apply on the next display pass, not a second later.
     const bool idle = chosen.idle.backlightSeconds != prefs_.idle.backlightSeconds || chosen.idle.dimPercent != prefs_.idle.dimPercent ||

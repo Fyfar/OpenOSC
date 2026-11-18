@@ -3,6 +3,7 @@
 #include "openosc/platform/idle_policy.hpp"
 #include "openosc/settings/run_mode.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/usb/clock_policy.hpp"
 #include <cstdio>
 
 namespace openosc::ui {
@@ -13,6 +14,9 @@ constexpr unsigned BacklightCount = sizeof Backlight / sizeof *Backlight;
 constexpr unsigned DimCount = sizeof IdleSettings::DimLevels / sizeof *IdleSettings::DimLevels;
 constexpr unsigned OffCount = sizeof IdleSettings::OffChoices / sizeof *IdleSettings::OffChoices;
 constexpr const char *Batteries[] = {"Icon", "Volts", "Percent"};
+// Preferences::usbController (the index). The data link only runs on ClockPolicy's profile.
+constexpr const char *UsbControllers[] = {"Disabled", "Enabled"};
+unsigned long megahertz(uint32_t mode) { return (unsigned long)(RunModes[mode].coreHz / 1000000UL); }
 template <size_t N> unsigned indexOf(uint32_t value, const uint32_t (&choices)[N]) {
     for (unsigned i = 0; i < N; ++i) if (choices[i] == value) return i;
     return N;
@@ -31,7 +35,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::ShowFps: return PropertyKind::Toggle;
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
-    case Action::GeneratorStartup: return PropertyKind::Choice;
+    case Action::GeneratorStartup: case Action::UsbController: return PropertyKind::Choice;
     default: return PropertyKind::Action;
     }
 }
@@ -48,7 +52,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightTimeout: return BacklightCount;
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
-    case Action::GeneratorStartup: return 2;
+    case Action::GeneratorStartup: case Action::UsbController: return 2;
     default: return 0;
     }
 }
@@ -63,6 +67,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::BacklightIdleLevel: return indexOf(prefs_.idle.dimPercent, IdleSettings::DimLevels);
     case Action::PowerOffTimeout: return indexOf(prefs_.idle.powerOffMinutes, IdleSettings::OffChoices); // An old value: none.
     case Action::GeneratorStartup: return prefs_.generatorStartup;
+    case Action::UsbController: return prefs_.usbController;
     default: return 0;
     }
 }
@@ -89,6 +94,10 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         break;
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
     case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
+    case Action::UsbController: // Enabled says where it runs.
+        if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
+        else std::snprintf(output, capacity, "Disabled");
+        break;
     default: PropertyList::optionName(row, index, output, capacity); break;
     }
 }
@@ -111,6 +120,13 @@ void SettingsProperties::value(unsigned row, char *output, size_t capacity) cons
     case Action::GeneratorStartup: // The choice, and with Restore last what the next boot does.
         if (prefs_.generatorStartup) std::snprintf(output, capacity, "Restore last (%s)", prefs_.generatorLastOutput ? "ON" : "OFF");
         else std::snprintf(output, capacity, "Off");
+        break;
+    case Action::UsbController: // The choice, and with Enabled whether the clock that runs allows it.
+        if (!prefs_.usbController) std::snprintf(output, capacity, "Disabled");
+        else if (usb::ClockPolicy::allows(activeRunMode_)) std::snprintf(output, capacity, "Enabled");
+        else if (activeRunMode_ < RunModeCount)
+            std::snprintf(output, capacity, "Enabled, off at %lu", megahertz(activeRunMode_));
+        else std::snprintf(output, capacity, "Enabled, off on HSI");
         break;
     case Action::BufferSize: case Action::BacklightTimeout: case Action::BacklightIdleLevel:
         if (option(row) < options(row)) optionName(row, option(row), output, capacity);
@@ -135,6 +151,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::BacklightIdleLevel: prefs_.idle.dimPercent = IdleSettings::DimLevels[index]; break;
     case Action::PowerOffTimeout: prefs_.idle.powerOffMinutes = IdleSettings::OffChoices[index]; break;
     case Action::GeneratorStartup: prefs_.generatorStartup = index; break;
+    case Action::UsbController: prefs_.usbController = index; break;
     default: return false;
     }
     return true;

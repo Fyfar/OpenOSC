@@ -301,6 +301,7 @@ private:
     // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.
     bool meterRestorePending() const { return meterRestore_.pending(data_.measurementMode(), data_.dmmSelectionStatus()); }
     DataStatus lastSelection_ = DataStatus::NoData;
+    uint32_t generatorFaults_ = 0; // generator::Snapshot::faults as last reported (one toast per stop).
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
     ui::MeterHoldProperties holdEditor_;

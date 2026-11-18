@@ -67,5 +67,7 @@ private:
     uint32_t decodeTicket_ = 0, decodeTotal_ = 0, decodeSent_ = 0;
     bool decodeBinary_ = false, waitingDecode_ = false;
     uint8_t ese_ = 0, sre_ = 0;
+    uint32_t generatorFaults_ = 0; // generator::Snapshot::faults as last seen (Engine::poll).
+    bool generatorFaultsKnown_ = false;
 };
 } // namespace openosc::scpi

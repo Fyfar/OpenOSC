@@ -42,7 +42,7 @@ public:
     DataStatus status() const { return portFailed_ ? DataStatus::HardwareError : link_.status(); }
     const Settings &settings() const { return settings_; }
     const OutputPlan &plan() const { return plan_; }
-    Snapshot snapshot() const { return {settings_, plan_, status(), requested_}; }
+    Snapshot snapshot() const { return {settings_, plan_, status(), requested_, 0, 0, OutputFault::None}; } // No DAC: no clock limit, no stream faults.
 
 private:
     bool start();

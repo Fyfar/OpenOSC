@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/platform/timer_plan.hpp"
+#include "openosc/settings/run_mode.hpp"
 #include <cstddef>
 
 namespace openosc::generator {
@@ -59,19 +60,50 @@ struct DacCapabilities {
     static constexpr bool Levels = true, Amplitude = false;
     static constexpr uint64_t MinimumMillihertz = 1;
     static constexpr uint16_t MinimumDutyPermille = 0, MaximumDutyPermille = 1000, DutyStepPermille = 5, AmplitudeStepMillivolts = 0;
-    static uint64_t maximumMillihertz(Shape shape, Level level=Level::Dedicated) {
-        constexpr uint32_t maxima[]={344000000,1000000000,100000000,129000000,294000000,100000000};
-        // A square on the DAC: 100 kHz. A Dedicated square is PWM from 1 kHz up (either drive).
-        if (shape==Shape::Square && level!=Level::Dedicated) return 100000000;
-        return unsigned(shape)<6 ? maxima[unsigned(shape)] : 0;
+    // The DAC stream: TIM6 TRGO -> DAC2 -> DMAMUX2 -> BDMA2 from SRAM4, one halfword per update (only
+    // BDMA2 reaches DAC2 on PA6; it has no FIFO or burst). Measured on a ZT703S (issue #23,
+    // build/reviews/issue23-200mhz-display/hardware/dac-rate-sweep.json, dac-period-sweep.json,
+    // candidate-280.json): with a 200 MHz timer clock updates every 25, 24, 23 and 22 ticks streamed
+    // through 4 s of polls, every 21 and 20 ticks (9.5, 10 MS/s) underran (DAC2 SR DMAUDR1); with
+    // 280 MHz every 28 ticks (10 MS/s) streams. A short observation, not a silicon limit: an update
+    // takes at least MinimumTimerTicks (25, kept as margin over 22) and the rate stays at most
+    // MaximumSamplesPerSecond (nothing faster was measured). TIM6 runs at the core clock on every run
+    // mode (APB1 = HCLK/2, timer x2).
+    static constexpr uint32_t MaximumSamplesPerSecond = 10000000, MinimumTimerTicks = 25;
+    static constexpr unsigned MinimumPoints = 28, MaximumPoints = 1024;
+    // The fewest timer ticks per DAC update at `timerHz`.
+    static constexpr uint32_t minimumDivider(uint32_t timerHz) {
+        const uint32_t rate = uint32_t((uint64_t(timerHz) + MaximumSamplesPerSecond - 1) / MaximumSamplesPerSecond);
+        return rate > MinimumTimerTicks ? rate : MinimumTimerTicks;
     }
-    static constexpr uint32_t DacSamplesPerSecond=10000000;
+    // The highest frequency of a shape and level with the DAC timer at `timerHz`: the shape's own
+    // maximum, and for a DAC output at most MinimumPoints samples per period at the fastest update
+    // (a Dedicated square is TIM13 PWM from 1 kHz: not limited by the stream). `timerHz` 0: the highest
+    // of any run mode (what a stored setting may hold; the profile running decides whether it plays).
+    static uint64_t maximumMillihertz(Shape shape, Level level = Level::Dedicated, uint32_t timerHz = 0) {
+        if (!timerHz) { // The highest of any run mode.
+            uint64_t highest = 0;
+            for (const auto &mode : RunModes) {
+                const uint64_t top = maximumMillihertz(shape, level, mode.coreHz);
+                if (top > highest) highest = top;
+            }
+            return highest;
+        }
+        constexpr uint64_t maxima[] = {344000000, 1000000000, 100000000, 129000000, 294000000, 100000000};
+        if (unsigned(shape) >= 6) return 0;
+        // A square on the DAC: 100 kHz. A Dedicated square is PWM from 1 kHz up (either drive): no stream.
+        if (shape == Shape::Square && level == Level::Dedicated) return maxima[1];
+        const uint64_t stream = uint64_t(timerHz) * 1000 / (uint64_t(minimumDivider(timerHz)) * MinimumPoints);
+        const uint64_t own = shape == Shape::Square ? 100000000 : maxima[unsigned(shape)];
+        return own < stream ? own : stream;
+    }
     static bool duty(Shape shape) { return shape == Shape::Square; }
     static uint16_t amplitudeLimitMillivolts(Shape, uint64_t) { return 5000; } // Not used: the module's field is kept as stored.
-    // Frequency within the shape and level (the timer plan checks what it can represent).
-    static bool accepts(const Settings &s) {
+    // Frequency within the shape and level at `timerHz` (0: any run mode; the timer plan checks what
+    // it can represent).
+    static bool accepts(const Settings &s, uint32_t timerHz = 0) {
         const double millihertz = s.frequencyHz.value() * 1000;
-        return s.valid() && millihertz >= MinimumMillihertz && millihertz <= double(maximumMillihertz(s.shape, s.level));
+        return s.valid() && millihertz >= MinimumMillihertz && millihertz <= double(maximumMillihertz(s.shape, s.level, timerHz));
     }
 };
 class WaveTable {
@@ -86,10 +118,24 @@ struct OutputPlan {
     WideRational actualHz;
     static bool calculate(const Settings &settings, uint32_t timerClockHz, OutputPlan &output);
 };
+// Why the output stopped by itself (Output::service, a start after a clock change): Underrun DAC2
+// DMAUDR1, Transfer a BDMA2 transfer error, Limit the setting has no plan at the clock that runs.
+enum class OutputFault : uint8_t { None, Underrun, Transfer, Limit };
+inline const char *faultText(OutputFault fault) {
+    switch (fault) {
+    case OutputFault::Underrun: return "Generator stopped: DAC underrun";
+    case OutputFault::Transfer: return "Generator stopped: DMA transfer error";
+    case OutputFault::Limit: return "Generator off: frequency above this clock's DAC limit";
+    default: return "";
+    }
+}
 struct Snapshot {
     Settings requested;
     OutputPlan applied;
     DataStatus status = DataStatus::NoData;
     bool enabled = false;
+    uint32_t timerHz = 0;  // The DAC timer clock the limits are computed at (0: no DAC, the ZT706S module).
+    uint32_t faults = 0;   // Stops the output made by itself so far (each one reported once).
+    OutputFault fault = OutputFault::None; // The last of them.
 };
 } // namespace openosc::generator

@@ -37,6 +37,9 @@ namespace openosc {
     diag::LocalControl local(localBackend);
 #endif
     uiReady_ = display_.initialize();
+    // Settings > Files & USB > USB controller, before the first clock change (headless Remote). An
+    // explicit Disabled holds also without a display; Recovery restores the setting independently.
+    usb.enable(prefs_.usbController != 0, Board::milliseconds());
     Watchdog::progress();
     // While a refresh waits on DMA2D: the watchdog, queued USB transfers and the acquisition
     // streams go on (no LVGL, FAT or UI state there; see RenderIdle).
@@ -193,6 +196,7 @@ void ApplicationController::applyPreferences() {
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     state_.meter.function = prefs_.meterFunction;
     configureDecoder();
+    if (usb_) usb_->enable(prefs_.usbController != 0, Board::milliseconds()); // Reload settings JSON.
     // Only the hold mode and its parameters: a cycle or snapshot never comes back by itself.
     if (data_.meter().holdCycle().settings() != prefs_.meter.hold) data_.configureMeterHold(prefs_.meter.hold);
     idle_.configure(prefs_.idle,Board::milliseconds());

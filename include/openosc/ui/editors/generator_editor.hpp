@@ -11,8 +11,10 @@ public:
     // ZT703S presets: main OUTPUT's frequencies, then its reference (TIM13 1 kHz square, 50 %).
     static constexpr uint32_t Presets[] = {10, 50, 100, 500, 1000, 2000, 5000};
     static constexpr unsigned PresetCount = sizeof Presets / sizeof *Presets, Reference = PresetCount;
-    void begin(const generator::Settings &settings, bool wave) {
-        draft_ = {settings, false, false}; wave_ = wave;
+    // `timerHz`: the DAC timer clock the frequency limit is computed at (generator::Snapshot::timerHz;
+    // 0: the highest of any run mode).
+    void begin(const generator::Settings &settings, bool wave, uint32_t timerHz = 0) {
+        draft_ = {settings, false, false}; wave_ = wave; timerHz_ = timerHz;
     }
     const generator::Settings &settings() const { return draft_.settings; }
     bool wave() const { return wave_; }
@@ -46,5 +48,6 @@ private:
     };
     Draft draft_, checkpoint_;
     bool wave_ = true;
+    uint32_t timerHz_ = 0;
 };
 } // namespace openosc::ui

@@ -3,20 +3,23 @@
 #include "openosc/board/current.hpp"
 
 namespace openosc {
-namespace { constexpr uint32_t ChargeMask = board::Current::ChargeStatus.mask(); }
+namespace {
+constexpr uint32_t ChargeMask = board::Current::ChargeStatus.mask();
+constexpr uint32_t ExternalMask = GPIO_PIN_9; // PC9: the factory external-power status (not proven VBUS).
+}
 static_assert(board::Current::ChargeStatus.port == board::Port::C);
 bool BatteryMonitor::initialize() {
+    GPIO_InitTypeDef gpio{}; // GPIOC is clocked by Board::initialize.
+    gpio.Pin=ExternalMask|ChargeMask; gpio.Mode=GPIO_MODE_INPUT; gpio.Pull=GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOC,&gpio); // Status lines always remain inputs.
     RCC_PeriphCLKInitTypeDef clock{};
     clock.PeriphClockSelection=RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_CKPER;
     clock.CkperClockSelection=RCC_CLKPSOURCE_HSI;
     clock.AdcClockSelection=RCC_ADCCLKSOURCE_CLKP;
     if (HAL_RCCEx_PeriphCLKConfig(&clock)!=HAL_OK) return false;
     __HAL_RCC_ADC12_CLK_ENABLE();
-    GPIO_InitTypeDef gpio{};
-    gpio.Pin=GPIO_PIN_4; gpio.Mode=GPIO_MODE_ANALOG; gpio.Pull=GPIO_NOPULL;
+    gpio.Pin=GPIO_PIN_4; gpio.Mode=GPIO_MODE_ANALOG;
     HAL_GPIO_Init(GPIOC,&gpio);
-    gpio.Pin=GPIO_PIN_9|ChargeMask; gpio.Mode=GPIO_MODE_INPUT;
-    HAL_GPIO_Init(GPIOC,&gpio); // Status lines always remain inputs.
     adc_.Instance=ADC1;
     auto &init=adc_.Init;
     init.ClockPrescaler=ADC_CLOCK_ASYNC_DIV4;
@@ -39,8 +42,8 @@ bool BatteryMonitor::initialize() {
     ready_=HAL_ADC_ConfigChannel(&adc_,&channel)==HAL_OK;
     return ready_;
 }
+// The status lines are read also without a working ADC; only the battery voltage needs it.
 void BatteryMonitor::poll(uint32_t now) {
-    if (!ready_) return;
     if (pending_) {
         if (__HAL_ADC_GET_FLAG(&adc_,ADC_FLAG_EOC)) {
             gauge_.sample(uint16_t(HAL_ADC_GetValue(&adc_)));
@@ -52,8 +55,8 @@ void BatteryMonitor::poll(uint32_t now) {
     if (int32_t(now-next_)<0 || pending_) return;
     next_=now+100;
     const uint32_t pins=GPIOC->IDR;
-    gauge_.digital(pins&GPIO_PIN_9,pins&ChargeMask);
-    if (!gauge_.state().external && HAL_ADC_Start(&adc_)==HAL_OK) {
+    gauge_.digital(pins&ExternalMask,pins&ChargeMask);
+    if (ready_ && !gauge_.state().external && HAL_ADC_Start(&adc_)==HAL_OK) {
         pending_=true; started_=now;
     }
 }

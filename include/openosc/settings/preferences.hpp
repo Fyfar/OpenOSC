@@ -16,6 +16,9 @@ struct Preferences {
     uint32_t millivolts[2] = {500, 500}, meterFunction = 0;
     uint32_t useBuiltinTheme = 0;
     uint32_t showFps = 1, batteryDisplay = 0; // batteryDisplay: 0 icon, 1 volts, 2 percent.
+    // Settings > Files & USB > USB controller: 1 enabled (USB data where the clock allows it, 200 MHz),
+    // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected). Older files: enabled.
+    uint32_t usbController = 1;
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
@@ -33,7 +36,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 1 && batteryDisplay < 3 && generatorShape < 6 &&
+               useBuiltinTheme <= 1 && showFps <= 1 && batteryDisplay < 3 && usbController <= 1 && generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
                generatorDutyPermille >= generator::Capabilities::MinimumDutyPermille &&

@@ -5,6 +5,13 @@ namespace openosc {
 void ApplicationController::serviceInstruments(uint32_t now) {
     serviceMeterRange();        // A panel, the settings or Remote took AUTO/RANGE: its stroke closed now.
     followGeneratorOutput(now); // Startup output: a user's ON/OFF once confirmed.
+    { // A stop the generator made by itself (DAC underrun, above the clock's DAC limit): one toast each.
+        const auto generator = data_.generator().snapshot();
+        if (generator.faults != generatorFaults_) {
+            generatorFaults_ = generator.faults;
+            if (uiReady_) { view_.notify(generator::faultText(generator.fault), now); dataRefresh_ = true; }
+        }
+    }
     const auto selection = data_.dmmCommandStatus();
     const bool visible = uiReady_;
     if (serialWatched_ && !data_.meterSerial().enabled()) {

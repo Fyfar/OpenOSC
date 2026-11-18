@@ -5,6 +5,8 @@
 namespace openosc {
 class BatteryMonitor {
 public:
+    // The status lines (PC9, charge status) become inputs first, so they are read also when the
+    // ADC set-up fails (they would otherwise stay in their analog reset mode and read 0).
     bool initialize();
     void poll(uint32_t now);
     const power::BatteryState &state() const { return gauge_.state(); }

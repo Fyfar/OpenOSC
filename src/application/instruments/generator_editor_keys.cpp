@@ -19,12 +19,12 @@ void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
     }
     if (key != FieldKey::Committed) return;
     if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify("Unsupported waveform/frequency/duty", now);
-    generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave());
+    generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave(), data_.generator().snapshot().timerHz);
     view_.properties(generatorEditor_, navigator_);
 }
 void ApplicationController::openGeneratorEditor(bool wave) {
     view_.focusParameter(wave ? 0 : 2);
-    generatorEditor_.begin(data_.generator().settings(), wave);
+    generatorEditor_.begin(data_.generator().settings(), wave, data_.generator().snapshot().timerHz);
     openPanel(Panel::Generator, generatorEditor_);
     refreshSoftKeys();
 }
@@ -32,7 +32,7 @@ void ApplicationController::openFrequencyEditor() {
     using Caps = generator::Capabilities;
     const auto &settings = data_.generator().settings();
     view_.focusParameter(1);
-    frequencyEditor_.begin(generator::Frequency::millihertz(settings.frequencyHz), Caps::maximumMillihertz(settings.shape, settings.level),
+    frequencyEditor_.begin(generator::Frequency::millihertz(settings.frequencyHz), Caps::maximumMillihertz(settings.shape, settings.level, data_.generator().snapshot().timerHz),
                            Caps::MinimumMillihertz);
     panel_ = Panel::Frequency;
     view_.frequencyEditor(frequencyEditor_);

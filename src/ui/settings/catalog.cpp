@@ -27,6 +27,7 @@ constexpr SettingsEntry appearance[] = {
 constexpr SettingsEntry files[] = {
     {"Reload settings JSON", Action::ReloadPreferences},
     {"Recovery / USB files", Action::Recovery},
+    {"USB controller", Action::UsbController},
     {"USB Remote", Action::UsbRemote},
     {"Screenshots",Action::Images},
     {"Clear screenshots",Action::ClearImages},
